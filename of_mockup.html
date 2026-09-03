@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus OF — ofApp + ofxImGui Adaptation</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --win: #2b2b2b;
+      --child: #323232;
+      --border: #3e3e3e;
+      --text: #d6d6d6;
+      --muted: #9a9a9a;
+      --accent: #5794f2;
+      --ok: #7eca9c;
+      --warn: #e5b567;
+      --danger: #e06c5b;
+    }
+
+    * {
+      box-sizing: border-box;
+      scrollbar-width: thin;
+      scrollbar-color: #4a4a4a #2b2b2b
+    }
+
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #4a4a4a;
+      border-radius: 0
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.45 "JetBrains Mono", Consolas, Menlo, monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none
+    }
+
+    /* ImGui MenuBar */
+    .menubar {
+      height: 28px;
+      background: var(--win);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 12px;
+      flex-shrink: 0
+    }
+
+    .menubar b {
+      color: #fff
+    }
+
+    .menubar span {
+      color: var(--muted)
+    }
+
+    .menubar .m {
+      padding: 2px 6px
+    }
+
+    .menubar .m:hover {
+      background: var(--child)
+    }
+
+    .menubar .right {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: var(--child);
+      padding: 1px 6px;
+      font-size: 11px
+    }
+
+    .chip.accent {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    /* Main dock */
+    .dock {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 210px 1fr 320px;
+      grid-template-rows: 1fr 190px;
+      grid-template-areas: "left view right" "bottom bottom bottom";
+      min-height: 0
+    }
+
+    .panel {
+      background: var(--win);
+      border: 1px solid var(--border);
+      margin: 4px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0
+    }
+
+    .panel>.title {
+      background: #252525;
+      border-bottom: 1px solid var(--border);
+      padding: 4px 8px;
+      font-weight: bold;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .panel>.body {
+      padding: 6px;
+      overflow: auto;
+      flex: 1
+    }
+
+    #p-left {
+      grid-area: left
+    }
+
+    #p-view {
+      grid-area: view
+    }
+
+    #p-right {
+      grid-area: right
+    }
+
+    #p-bottom {
+      grid-area: bottom
+    }
+
+    /* pipeline */
+    .stage {
+      display: grid;
+      grid-template-columns: 14px 1fr auto;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--child);
+      border: 1px solid var(--border);
+      margin-bottom: 4px
+    }
+
+    .led {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #555
+    }
+
+    .led.ok {
+      background: var(--ok)
+    }
+
+    .led.run {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent)
+    }
+
+    .led.warn {
+      background: var(--warn)
+    }
+
+    .stage small {
+      color: var(--muted);
+      display: block
+    }
+
+    button,
+    select,
+    input[type=text] {
+      background: var(--child);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font: inherit;
+      padding: 4px 8px;
+      border-radius: 3px
+    }
+
+    button:hover {
+      border-color: var(--accent)
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: bold
+    }
+
+    button.danger {
+      background: #5a2d28;
+      border-color: var(--danger);
+      color: #ffb3a8
+    }
+
+    button:disabled {
+      opacity: .45
+    }
+
+    /* viewport = of GL canvas */
+    .viewport {
+      flex: 1;
+      background: #0f0f0f;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 260px
+    }
+
+    .viewport img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      opacity: .95
+    }
+
+    .bbox {
+      position: absolute;
+      border: 2px solid var(--ok);
+      background: rgba(126, 202, 156, .15);
+      pointer-events: none
+    }
+
+    .bbox.flagged {
+      border-color: var(--danger);
+      background: rgba(224, 108, 91, .18)
+    }
+
+    .bbox span {
+      position: absolute;
+      top: -18px;
+      left: 0;
+      background: #000;
+      color: #fff;
+      font-size: 11px;
+      padding: 1px 5px;
+      white-space: nowrap
+    }
+
+    .gl-overlay {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0, 0, 0, .78);
+      border: 1px solid #444;
+      padding: 5px 7px;
+      font-size: 11px
+    }
+
+    .gl-overlay b {
+      color: var(--accent)
+    }
+
+    .crosshair {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: .35
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 4px;
+      padding: 6px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    /* inspector collapsing */
+    details {
+      background: var(--child);
+      border: 1px solid var(--border);
+      margin-bottom: 6px
+    }
+
+    details summary {
+      padding: 5px 8px;
+      cursor: pointer;
+      color: #fff;
+      background: #2e2e2e
+    }
+
+    details summary:hover {
+      color: var(--accent)
+    }
+
+    details .in {
+      padding: 6px 8px
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0
+    }
+
+    .row span:first-child {
+      color: var(--muted)
+    }
+
+    .perchar {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      margin-top: 4px
+    }
+
+    .perchar i {
+      font-style: normal;
+      border: 1px solid var(--border);
+      padding: 1px 4px;
+      background: #252525
+    }
+
+    .perchar i.lo {
+      border-color: var(--warn);
+      color: var(--warn)
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px
+    }
+
+    th {
+      color: var(--muted);
+      text-align: left;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--win)
+    }
+
+    td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #333
+    }
+
+    tr:hover td {
+      background: #333
+    }
+
+    tr.flagged td {
+      background: rgba(224, 108, 91, .12)
+    }
+
+    tr.warn td {
+      background: rgba(229, 181, 103, .08)
+    }
+
+    .tabs {
+      display: flex;
+      gap: 2px
+    }
+
+    .tabs button {
+      border-radius: 3px 3px 0 0
+    }
+
+    .tabs button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent)
+    }
+
+    .console {
+      font-size: 11px;
+      white-space: pre-wrap
+    }
+
+    .console .ok {
+      color: var(--ok)
+    }
+
+    .console .warn {
+      color: var(--warn)
+    }
+
+    .console .err {
+      color: var(--danger)
+    }
+
+    .console .inf {
+      color: var(--accent)
+    }
+
+    .memplot {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 44px;
+      background: #181818;
+      border: 1px solid var(--border);
+      padding: 3px
+    }
+
+    .memplot div {
+      flex: 1;
+      background: var(--accent);
+      min-height: 3px
+    }
+
+    /* ImGui popup + toast */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50
+    }
+
+    .modal .box {
+      width: 420px;
+      max-width: 92vw;
+      background: var(--win);
+      border: 1px solid var(--accent)
+    }
+
+    .modal .box h3 {
+      margin: 0;
+      padding: 8px 10px;
+      background: #252525;
+      border-bottom: 1px solid var(--border);
+      color: #fff
+    }
+
+    .modal .box .c {
+      padding: 10px
+    }
+
+    .modal label {
+      display: block;
+      color: var(--muted);
+      margin: 8px 0 3px
+    }
+
+    .modal input,
+    .modal select,
+    .modal textarea {
+      width: 100%
+    }
+
+    .hidden {
+      display: none !important
+    }
+
+    #toasts {
+      position: fixed;
+      top: 36px;
+      right: 8px;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 300px
+    }
+
+    .toast {
+      background: var(--win);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 6px 8px
+    }
+
+    .toast.ok {
+      border-left-color: var(--ok)
+    }
+
+    .toast.warn {
+      border-left-color: var(--warn)
+    }
+
+    .toast.err {
+      border-left-color: var(--danger)
+    }
+
+    .note {
+      border: 1px dashed #555;
+      padding: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 6px
+    }
+
+    kbd {
+      border: 1px solid var(--border);
+      background: #181818;
+      padding: 0 4px;
+      border-radius: 3px
+    }
+
+    @media(max-width:1000px) {
+      .dock {
+        grid-template-columns: 170px 1fr;
+        grid-template-rows: 1fr auto auto auto
+      }
+
+      #p-right {
+        grid-column: 1/-1
+      }
+
+      #p-bottom {
+        grid-column: 1/-1
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="menubar">
+    <b>Argus</b><span>ofApp · 60fps · ofxImGui 1.89 · OF 0.12</span>
+    <span class="m">File</span><span class="m">View</span><span class="m">Pipeline</span><span class="m">Help</span>
+    <div class="right">
+      <span class="chip" id="fps">60 fps · draw 4.2ms</span>
+      <span class="chip accent" id="memChip">MEM 1.42 / 4.0 GB · 34%</span>
+      <span class="chip" id="bell">⚠ 3</span>
+      <span class="chip">operator_1</span>
+    </div>
+  </div>
+
+  <div class="dock">
+    <!-- LEFT: tools + pipeline -->
+    <div class="panel" id="p-left">
+      <div class="title"><span>Pipeline — ofApp::update()</span><span>●</span></div>
+      <div class="body">
+        <div class="note">Adapted: Qt <kbd>QStackedWidget</kbd> pages → single OF window. Pipeline runs in
+          <kbd>update()</kbd>, draws in <kbd>draw()</kbd>. No page router.</div>
+        <div id="stages"></div>
+        <div class="row"><span>Confidence thr</span><b id="thrVal">0.72</b></div>
+        <input id="thr" type="range" min="0.5" max="0.95" step="0.01" value="0.72">
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button class="primary" id="btnRun" style="flex:1">▶ Run (R)</button>
+          <button id="btnBatch" style="flex:1">Batch 10</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button id="btnFrame">Process Frame</button>
+          <button id="btnFail">OCR fail</button>
+        </div>
+        <div class="row" style="margin-top:6px"><span>Loaded</span><span id="loaded">4 imgs · 0 vid</span></div>
+        <div class="row"><span>Video buf</span><span>24 frames · double-buffer</span></div>
+      </div>
+    </div>
+
+    <!-- CENTER: GL viewport -->
+    <div class="panel" id="p-view">
+      <div class="title"><span>Viewport — ofApp::draw() · <span id="viewLabel">img_01.jpg
+            1920×1080</span></span><span>ROI x:234 y:412 w:156 h:48 · OCR 247ms</span></div>
+      <div class="body" style="display:flex;flex-direction:column">
+        <div class="viewport" id="vp">
+          <div class="crosshair"></div>
+          <img id="preview" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=900&h=550&fit=crop"
+            alt="viewport">
+          <div class="bbox" id="bbox" style="left:34%;top:60%;width:32%;height:15%"><span id="bboxLabel">AB123CD ·
+              92%</span></div>
+          <div class="gl-overlay">
+            Plate: <b id="ovPlate">AB123CD</b> [EU] ✓ norm<br>
+            Conf: <b id="ovConf">92%</b> <span id="ovLow" style="color:var(--warn)">low 'B' 64%</span><br>
+            Valid: <span id="ovValid" style="color:var(--ok)">✓ EU valid</span> · O→0 I→1
+          </div>
+          <div class="gl-overlay" style="top:auto;bottom:6px;left:6px">ofTrueTypeFont · aliased GL text — not HTML. No
+            CSS blur/radius.</div>
+        </div>
+        <div class="toolbar">
+          <button id="tPlay">⏵ Play</button>
+          <button id="tFlag">Demo Flagged</button>
+          <button id="tCorrupt">Corrupt img</button>
+          <span style="color:var(--muted)">Seek</span><input id="seek" type="range" min="0" max="100" value="12"
+            style="width:140px">
+          <span class="chip" id="frameLbl">f0001 · 00:00:00</span>
+          <span class="chip">mat 11.8 MB · <span id="vpMem">342 MB</span></span>
+          <span style="margin-left:auto;color:var(--muted)"><kbd>Space</kbd> play <kbd>←→</kbd> seek <kbd>R</kbd>
+            re-run</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: inspector -->
+    <div class="panel" id="p-right">
+      <div class="title"><span>Inspector — ofxImGui</span><span>draw() overlay</span></div>
+      <div class="body">
+        <details open>
+          <summary>Match Info</summary>
+          <div class="in">
+            <div class="row"><span>Watchlist</span><b id="mMatch" style="color:var(--ok)">NO</b></div>
+            <div class="row"><span>Flag type</span><span id="mType">—</span></div>
+            <div class="row"><span>Reason</span><span id="mReason" style="max-width:170px;text-align:right">—</span>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>OCR · per-char (Tess 5.3)</summary>
+          <div class="in">
+            <div class="perchar" id="perchar"></div>
+            <div class="row" style="margin-top:4px"><span>Mean</span><b id="ocrMean">92%</b></div>
+          </div>
+        </details>
+        <details open>
+          <summary>Decision + Operator notes</summary>
+          <div class="in">
+            <div style="display:flex;gap:4px">
+              <button id="dAllow" class="primary" style="flex:1">Allow</button>
+              <button id="dBlock" class="danger" style="flex:1">Block</button>
+              <button id="dReview" style="flex:1">Review</button>
+            </div>
+            <label style="color:var(--muted);font-size:11px">notes</label>
+            <input type="text" id="notes" placeholder="operator notes...">
+            <button class="primary" id="btnSave" style="width:100%;margin-top:6px">Save Decision &amp; Log
+              (Enter)</button>
+          </div>
+        </details>
+        <details>
+          <summary>Memory (this view)</summary>
+          <div class="in">
+            <div class="row"><span>Image</span><span>4.2 MB</span></div>
+            <div class="row"><span>Decoded mat</span><span>11.8 MB</span></div>
+            <div class="row"><span>Video cache</span><span id="rvVid">0 MB</span></div>
+            <button id="btnPurge" style="width:100%;margin-top:4px">Purge caches (mat.release)</button>
+          </div>
+        </details>
+        <details>
+          <summary>Flag editor (replaces Qt modal)</summary>
+          <div class="in">
+            <button id="btnFlagModal" style="width:100%">Add / Edit flagged…</button>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- BOTTOM: console + tables -->
+    <div class="panel" id="p-bottom">
+      <div class="title">
+        <div class="tabs">
+          <button class="active" data-tab="console">Console — ofLog</button>
+          <button data-tab="flagged">Flagged (4)</button>
+          <button data-tab="logs">Logs &amp; Alerts</button>
+          <button data-tab="mem">Memory</button>
+        </div>
+        <span style="color:var(--muted)">spill-to-disk when &gt;85% · mat.release() after OCR</span>
+      </div>
+      <div class="body">
+        <div id="tab-console" class="console">[14:32:07] [INFO] [PlateDetector] 1 candidate AB123CD 92%
+          [14:32:07] [INFO] [PlateValidator] norm AB123CD ✓ EU valid
+          [14:32:07] [INFO] [FlagStore] lookup AB123CD → null → Allow
+          <span class="warn">[14:15:22] [WARN] [AlertService] XY987ZT SUSPICIOUS — cooldown 5min ok → toast</span>
+          <span id="clog"></span>
+        </div>
+        <div id="tab-flagged" class="hidden">
+          <table>
+            <thead>
+              <tr>
+                <th>Plate</th>
+                <th>Type</th>
+                <th>Reason</th>
+                <th>Added</th>
+                <th>Matched</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="flagBody"></tbody>
+          </table>
+        </div>
+        <div id="tab-logs" class="hidden">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Plate</th>
+                <th>Conf</th>
+                <th>Flag</th>
+                <th>Type</th>
+                <th>Decision</th>
+                <th>Op</th>
+              </tr>
+            </thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+        <div id="tab-mem" class="hidden">
+          <div style="display:grid;grid-template-columns:220px 1fr 1fr;gap:8px">
+            <div>
+              <div class="row"><span>Used</span><b id="memUsed">1.42 / 4.0 GB (34%)</b></div>
+              <div class="row"><span>Peak</span><span>2.14 GB</span></div>
+              <div class="row"><span>Limit</span><span>3.20 GB</span></div>
+              <div style="display:flex;gap:4px;margin-top:6px"><button id="btnClear">Clear cache</button><button
+                  id="btnSpike">Spike +0.9G</button></div>
+            </div>
+            <div>
+              <div style="color:var(--muted)">BREAKDOWN img 420 · vid 180 · ocr 285 · store 12 · logs 124 · OF/GL 210 MB
+              </div>
+              <div class="memplot" id="spark"></div>
+              <div style="color:var(--muted)">history 5min · live drift ±0.02GB/3.2s</div>
+            </div>
+            <div class="note">OF note: decoded <kbd>ofPixels</kbd>/<kbd>cv::Mat</kbd> held until
+              <kbd>mat.release()</kbd>. Video double-buffer 24f. Auto-clear 40% img + 70% vid at &gt;85%. Same policy as
+              Qt mockup, different widgets (ImGui plot, not Tailwind gauge).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div id="flagModal" class="modal hidden">
+    <div class="box">
+      <h3>Add / Edit Flagged — ImGui::BeginPopupModal</h3>
+      <div class="c">
+        <label>PLATE *</label><input id="fPlate" type="text" value="AB123CD">
+        <div class="row" style="margin-top:4px"><span>Normalized</span><b id="fNorm">AB123CD ✓ valid [EU]</b></div>
+        <div style="color:var(--muted);font-size:11px">Auto O→0 I→1, strip. 5→S intentionally omitted in OF demo — see
+          note.</div>
+        <label>TYPE</label><select id="fType">
+          <option>BLOCKED</option>
+          <option>SUSPICIOUS</option>
+          <option>AUTHORIZED</option>
+        </select>
+        <label>REASON *</label><input id="fReason" type="text" value="Stolen vehicle – Metro PD #2024-045">
+        <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end"><button id="fCancel">Cancel
+            (Esc)</button><button class="primary" id="fSave">Save → flagged.json</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stages = ["ImageSource", "PlateDetector", "PlateOCR", "PlateValidator", "FlagStore", "AlertService", "Logger"];
+    let cur = {plate: "AB123CD", conf: 92, flagged: false, type: "—"};
+    let mem = {used: 1.42, total: 4.0, hist: [28, 30, 32, 31, 34, 36, 38, 40, 34, 33, 36, 34, 32, 30, 34, 37, 34]};
+    const flagged = [
+      {plate: "AB123CD", type: "BLOCKED", reason: "Stolen – Metro PD #2024-045", added: "2024-01-10", matched: "14:15", status: "Active"},
+      {plate: "XY987ZT", type: "SUSPICIOUS", reason: "Restricted zone 3x", added: "2024-01-12", matched: "09:30", status: "Active"},
+      {plate: "KL555MN", type: "AUTHORIZED", reason: "Staff parking A", added: "2023-11-01", matched: "Never", status: "Active"},
+      {plate: "QR777QQ", type: "BLOCKED", reason: "Expired reg", added: "2024-01-05", matched: "16:45", status: "Inactive"}];
+    const logs = [
+      {t: "14:32:07", plate: "AB123CD", conf: "94%", flag: true, type: "BLOCKED", dec: "Review", op: "op_1"},
+      {t: "14:15:22", plate: "XY987ZT", conf: "87%", flag: true, type: "SUSPICIOUS", dec: "Block", op: "op_1"},
+      {t: "13:58:01", plate: "???", conf: "—", flag: false, type: "—", dec: "Review", op: "op_1"},
+      {t: "13:42:10", plate: "KL555MN", conf: "91%", flag: true, type: "AUTHORIZED", dec: "Allow", op: "op_1"}];
+
+    function toast(m, c = "") {const e = document.createElement("div"); e.className = "toast " + c; e.textContent = m; document.getElementById("toasts").appendChild(e); setTimeout(() => e.remove(), 3500); while (document.getElementById("toasts").children.length > 3) document.getElementById("toasts").firstChild.remove();}
+    function clog(m, cls = "") {document.getElementById("clog").innerHTML += `<span class="${cls}">${m}</span>\n`;}
+    function renderStages(active = -1) {document.getElementById("stages").innerHTML = stages.map((s, i) => `<div class="stage"><div class="led ${i < active ? "ok" : i === active ? "run" : ""}"></div><div>${s}<small>${["load/mat+meta", "gray→Canny→contours", "Tess LSTM SINGLE_LINE", "normalize+regex", "lookup + lev≤1", "cooldown 5min", "SQLite + CSV"][i]}</small></div><span style="color:var(--muted)">${i < active ? "✓" : i === active ? "…" : "·"}</span></div>`).join("");}
+    function renderPerchar() {const cs = cur.plate.split(""), cf = [98, 64, 94, 91, 88, 96, 93]; document.getElementById("perchar").innerHTML = cur.conf === "—" ? "<span style='color:var(--danger)'>OCR failed • no chars</span>" : cs.map((ch, i) => {const c = cf[i] || 90; return `<i class="${c < 85 ? "lo" : ""}">${ch} ${c}%</i>`}).join("");}
+    function setScan(p, c, f) {
+      cur = {plate: p, conf: c, flagged: f}; const fail = c === "—" || p === "???";
+      document.getElementById("ovPlate").textContent = p; document.getElementById("ovConf").textContent = c;
+      document.getElementById("bboxLabel").textContent = fail ? "no detection" : `${p} · ${c}${f ? " · FLAGGED" : ""}`;
+      document.getElementById("bbox").style.display = fail ? "none" : "block";
+      document.getElementById("bbox").className = "bbox" + (f ? " flagged" : "");
+      document.getElementById("mMatch").textContent = f ? "YES" : "NO"; document.getElementById("mMatch").style.color = f ? "var(--danger)" : "var(--ok)";
+      document.getElementById("mType").textContent = f ? "BLOCKED" : "—"; document.getElementById("mReason").textContent = f ? "Stolen – Metro PD #2024-045" : "—";
+      document.getElementById("ocrMean").textContent = c; renderPerchar();
+    }
+    function renderTables() {
+      document.getElementById("flagBody").innerHTML = flagged.map(f => `<tr class="${f.type === "BLOCKED" ? "flagged" : ""}"><td><b>${f.plate}</b></td><td>${f.type}</td><td>${f.reason}</td><td>${f.added}</td><td>${f.matched}</td><td>${f.status}</td><td><button>edit</button></td></tr>`).join("");
+      document.getElementById("logBody").innerHTML = logs.map(l => `<tr class="${l.flag ? (l.type === "BLOCKED" ? "flagged" : "warn") : ""}"><td>${l.t}</td><td><b>${l.plate}</b></td><td>${l.conf}</td><td>${l.flag ? "⚠" : "—"}</td><td>${l.type}</td><td>${l.dec}</td><td>${l.op}</td></tr>`).join("");
+    }
+    function memUI() {const p = Math.round(mem.used / mem.total * 100); document.getElementById("memChip").textContent = `MEM ${mem.used.toFixed(2)} / ${mem.total.toFixed(1)} GB · ${p}%`; document.getElementById("memUsed").textContent = `${mem.used.toFixed(2)} / ${mem.total.toFixed(1)} GB (${p}%)`; document.getElementById("spark").innerHTML = mem.hist.map(v => `<div style="height:${Math.max(6, v)}%;background:${v > 85 ? "var(--danger)" : v > 60 ? "var(--warn)" : "var(--accent)"}"></div>`).join("");}
+    function bump(d) {mem.used = Math.max(.4, Math.min(mem.total * .98, mem.used + d)); mem.hist.push(Math.round(mem.used / mem.total * 100)); if (mem.hist.length > 24) mem.hist.shift(); memUI();}
+
+    // tabs
+    document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active")); b.classList.add("active");["console", "flagged", "logs", "mem"].forEach(t => document.getElementById("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));});
+    // run pipeline animated through update() stages
+    document.getElementById("btnRun").onclick = () => {let i = 0; renderStages(0); clog("[update] ImageSource load img_01.jpg 4.2MB → mat 11.8MB", "inf"); const t = setInterval(() => {i++; renderStages(i); if (i === 2) clog("[update] PlateOCR AB123CD 92% mean (247ms)"); if (i >= stages.length) {clearInterval(t); renderStages(-1); stages.forEach(() => { }); setScan("AB123CD", "92%", false); clog("[draw] bbox green + overlay · Logger Allow ✓", "ok"); bump(.07); toast("Scan complete: AB123CD 92% → Allow", "ok");} }, 260);};
+    document.getElementById("tFlag").onclick = () => {setScan("AB123CD", "92%", true); clog("[AlertService] BLOCKED Stolen → popup + bell+1 + sound", "warn"); toast("FLAGGED PLATE DETECTED AB123CD · BLOCKED", "warn"); bump(.06);};
+    document.getElementById("btnFail").onclick = () => {setScan("???", "—", false); clog("[PlateOCR] fail conf — → forced Review, bbox hidden", "err"); toast("OCR failed 38% < 0.72 → Review", "warn");};
+    document.getElementById("tCorrupt").onclick = () => {clog("[ImageSource] throw libjpeg: bogus marker traffic_corrupt.jpg", "err"); toast("Failed to load: bogus marker", "err");};
+    document.getElementById("btnFrame").onclick = () => {bump(.08); toast("Processing frame f0001…"); setTimeout(() => {setScan("XY987ZT", "87%", true); clog("[VideoCapture] frame 1 → XY987ZT 87% SUSPICIOUS", "warn");}, 700);};
+    document.getElementById("btnBatch").onclick = () => {toast("Batch 10 · 2 threads (ofThread / QtConcurrent equiv)"); bump(.45); let n = 0; const t = setInterval(() => {n++; bump(.03); if (n >= 10) {clearInterval(t); toast("Batch complete 10/10", "ok"); bump(-.2);} }, 300);};
+    document.getElementById("btnSave").onclick = () => {logs.unshift({t: new Date().toLocaleTimeString(), plate: cur.plate, conf: cur.conf === "—" ? "—" : cur.conf + "%", flag: cur.flagged, type: cur.flagged ? "BLOCKED" : "—", dec: "Allow", op: "op_1"}); renderTables(); clog(`[Logger] log Allow ${cur.plate} + notes → SQLite`, "ok"); toast("Decision saved → Logs", "ok"); bump(.02);};
+    document.getElementById("dBlock").onclick = () => {setScan(cur.plate, cur.conf, true); toast("Marked Block → will alert if Active+cooldown", "warn");};
+    document.getElementById("btnPurge").onclick = () => {bump(-.3); toast("mat.release() + purge video buf", "ok");};
+    document.getElementById("btnClear").onclick = () => {bump(-.3); toast("Cache cleared", "ok");};
+    document.getElementById("btnSpike").onclick = () => {bump(.9); toast("Spike +0.9GB batch decode", "warn");};
+    document.getElementById("thr").oninput = e => document.getElementById("thrVal").textContent = parseFloat(e.target.value).toFixed(2);
+    document.getElementById("btnFlagModal").onclick = () => document.getElementById("flagModal").classList.remove("hidden");
+    document.getElementById("fCancel").onclick = () => document.getElementById("flagModal").classList.add("hidden");
+    document.getElementById("fSave").onclick = () => {flagged.push({plate: document.getElementById("fPlate").value.toUpperCase(), type: document.getElementById("fType").value, reason: document.getElementById("fReason").value, added: new Date().toISOString().slice(0, 10), matched: "Never", status: "Active"}); renderTables(); document.getElementById("flagModal").classList.add("hidden"); toast("Flagged saved → flagged.json atomic write", "ok");};
+    document.getElementById("fPlate").oninput = e => {e.target.value = e.target.value.toUpperCase(); let n = e.target.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/O/g, "0").replace(/I/g, "1"); document.getElementById("fNorm").textContent = (n || "—") + (/^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$/.test(n) ? " ✓ valid [EU]" : " ✗ invalid");};
+    document.addEventListener("keydown", e => {if (e.code === "KeyR") document.getElementById("btnRun").click(); if (e.code === "Escape") document.getElementById("flagModal").classList.add("hidden"); if (e.code === "Space" && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {e.preventDefault(); toast("Video play/pause (ofVideoPlayer)");} });
+    setInterval(() => bump((Math.random() - .5) * .04), 3200);
+    setInterval(() => {const f = (58 + Math.random() * 4).toFixed(0); document.getElementById("fps").textContent = `${f} fps · draw ${(3.5 + Math.random() * 2).toFixed(1)}ms`;}, 1500);
+
+    renderStages(-1); renderPerchar(); renderTables(); memUI();
+  </script>
+</body>
+
+</html>
