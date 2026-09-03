@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://nyght-x-walker.github.io/argus/"><b>▶ Live Mockup</b> — nyght-x-walker.github.io/argus</a> • Clean, testable desktop system for cybersecurity coursework
+  <a href="https://nyght-x-walker.github.io/argus/"><b>▶ Live Mockup</b> — nyght-x-walker.github.io/argus</a> • Clean, testable desktop system
 </p>
 
 > **Not for production** — educational, offline-first, no face/person tracking. Mockup first to lock layout & flows before C++ backend.
@@ -20,7 +20,7 @@
 
 | | |
 |---|---|
-| **Users** | Cybersecurity students · security operators (lab/demo) |
+| **Users** | Cybersecurity operators (lab/demo) |
 | **What it does** | Ingest **image / video frame** → detect plate → OCR → **normalize & validate** → check **flagged watchlist** (Blocked / Suspicious / Authorized) → **alert** if matched → **log** with decision & notes |
 | **Inputs** | Drag & drop JPG/PNG/BMP/MP4 (50 MB, batch ≤10), camera frame |
 | **Outputs** | Bounding box + plate text + confidence + per-char detail, flag badge, alert popup + sound, CSV/JSON export |
@@ -36,10 +36,10 @@
 | **Lang** | C++17 (gcc ≥9) | Course env, RAII, `std::optional`, smart pointers |
 | **Vision** | OpenCV 4.8 `core/imgproc/imgcodecs/objdetect/videoio` | Plate ROI + `VideoCapture`, Linux-native |
 | **OCR** | Tesseract 5.3 C++ API | Per-char confidence, EU/US/UK traineddata, offline |
-| **UI** | Qt 6 Widgets | Single `QMainWindow` + `QStackedWidget` → 1:1 with HTML mockup `ui_mockup.html:1` |
+| **UI** | Qt 6 Widgets | Single `QMainWindow` + `QStackedWidget` → 1:1 with HTML mockup UI views; mockup `index.html`/`ui_mockup.html` is HTML/Tailwind, not widget-layout |
 | **Build** | CMake 3.16+ `target_*` | `argus_core` lib + `argus_app` + `argus_tests` |
 | **Persist** | `resources/flagged.json` (atomic `tmp→rename→fsync`) + SQLite `argus.db` | Human-readable + queryable |
-| **Mockup** | HTML/Tailwind + vanilla JS, GitHub Pages `master/index.html` | `https://nyght-x-walker.github.io/argus/` |
+| **Mockup** | HTML/Tailwind + vanilla JS, static `index.html`/`ui_mockup.html` | `/` (served from repo root) |
 
 ---
 
@@ -123,9 +123,9 @@ argus/
 | Component | API | Key Details |
 |---|---|---|
 | **ImageSource** | `std::optional<Mat> load(path/videoFrame)` + `{w,h,bytes,fps,frameIdx,ts}` | MIME + 50 MB guard, `filesystem::canonical` reject `..`, header sniff |
-| **PlateDetector** | `vector<Rect> detect(Mat, vector<double>& confs)` | `gray → bilateral → Canny → findContours → aspect 2–5, area 0.5%–15% → NMS`. `constexpr MIN_PLATE_AREA_FRACTION=0.005`. Empty = expected |
+| **PlateDetector** | `vector<Rect> detect(const Mat, vector<double>& confs)` | `gray → bilateral → Canny → findContours → aspect 2–5, area 0.5%–15% → NMS`. `constexpr MIN_PLATE_AREA_FRACTION=0.005`. Empty = expected |
 | **PlateOCR** | `OcrResult{string text; double meanConf; vector<CharConf> perChar;}` | `TessBaseAPI`, `oem LSTM`, `psm SINGLE_LINE`, lang `eu/us/uk` from Settings |
-| **PlateValidator** | `string normalize(raw)` / `bool isValid(norm)` / `Region` | `upper, trim, O→0, I→1, 5→S, '-' strip` + `EU ^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$`. Live preview in badge + Flagged modal |
+| **PlateValidator** | `string normalize(raw)` / `bool isValid(norm)` / `Region` | `upper, trim, O→0, I→1, 5→S, '-' strip` + `EU ^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$`. Live preview in badge + Flagged modal. Normalization constants per `CODE_STYLE.md:72` `UPPER_SNAKE_CASE`. |
 | **FlagStore** | `optional<FlagEntry> lookup(norm)` / `add/update/remove` / `save()` | `unordered_map<norm,FlagEntry>` + atomic `tmp→rename→fsync`. Fuzzy `lev≤1` only if `conf<85` |
 | **AlertService** | `bool shouldAlert(entry, Settings)` | `triggerAlert && status==Active && cooldown(now-lastAlert>5min)` → `QSystemTrayIcon::showMessage` |
 | **Logger** | `log(ScanEvent)` / `exportCsv(filter)` / `rotate()` | `logs{ts,imagePath,thumbPath,plateRaw,plateNorm,conf,perCharJson,flagMatch,flagType,region,decision,op,notes,mem}`. Graceful `ENOSPC → toast` |
@@ -213,7 +213,7 @@ sequenceDiagram
 flowchart LR
   B[Drop 10 images] --> Q[QtConcurrent::mapped<br/>2 threads]
   Q --> P[Progress 3/10 30%<br/>scanLeft batchProgress]
-  P --> M[Each mat 4.2 MB<br/>decoded 11.8 MB<br/>+0.14 GB/image]
+  P --> M[Each mat 4.2 MB<br/>decoded 11.8 MB<br/>+IMG_MEM_BUMP GB/image]
   M --> C{>85%?}
   C -->|yes| A[Auto-clear 40% img cache<br/>bump -0.15 GB]
   C -->|no| N[Cancel?]
@@ -249,7 +249,7 @@ pie title Memory Breakdown (1.42 / 4.0 GB = 34%)
   "Headroom" : 2600
 ```
 
-*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar `29:1` → click scrolls to `memoryPanel` `96:1`; sidebar widget `42:1` `1.4/4GB peak 2.1GB`; Dashboard gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+0.14 GB/image, +0.38 GB/video`.
+*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar `29:1` → click scrolls to `memoryPanel` `96:1`; sidebar widget `42:1` `1.4/4GB peak 2.1GB`; Dashboard gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+IMG_MEM_BUMP GB/image, +VID_MEM_BUMP GB/video` where `constexpr double IMG_MEM_BUMP=0.14; constexpr double VID_MEM_BUMP=0.38;` (CODE_STYLE.md:114).
 
 ---
 
@@ -257,7 +257,7 @@ pie title Memory Breakdown (1.42 / 4.0 GB = 34%)
 
 ```bash
 cmake -B build -S . && cmake --build build -j   # -Wall -Wextra -Werror
-./build/argus_app                                # Qt window
+./build/argus_app                                # Qt window |
 ctest --test-dir build --output-on-failure
 ```
 
