@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus — Overview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    tailwind.config = {darkMode: 'class', theme: {extend: {colors: {bg: '#1e1e2e', surface: '#282a36', panel: '#313244', border: '#44475a', accent: '#8be9fd', danger: '#ff5555', warn: '#ffb86c', ok: '#50fa7b', muted: '#6272a4'}}}}
+  </script>
+  <style>
+    * { scrollbar-width: thin; scrollbar-color: #44475a #282a36 }
+    ::-webkit-scrollbar { width: 8px; height: 8px }
+    ::-webkit-scrollbar-thumb { background: #44475a; border-radius: 8px }
+    @media (max-width:768px) { .max-w-full-md { max-width: none; } }
+  </style>
+</head>
+<body class="bg-bg text-zinc-100 min-h-screen flex flex-col">
+
+  <!-- TOP BAR -->
+  <header class="h-14 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0 sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded bg-accent flex items-center justify-center text-bg font-black">A</div>
+      <div>
+        <div class="font-bold leading-none tracking-wide">ARGUS</div>
+        <div class="text-[10px] tracking-[0.18em] text-muted -mt-0.5">LICENSE PLATE RECOGNITION</div>
+      </div>
+      <span class="ml-4 hidden md:inline-flex text-xs bg-panel border border-border px-2 py-1 rounded">v0.1.0 • Student Project</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="window.location.href='/'"
+        class="relative w-9 h-9 rounded bg-panel border border-border flex items-center justify-center hover:border-accent">
+        <i class="fa-solid fa-house-door"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="flex flex-1 min-h-0 px-4 py-8">
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-3xl mx-auto space-y-6">
+
+      <!-- SECTION: Project Summary -->
+      <section>
+        <h1 class="text-3xl font-bold">Argus</h1>
+        <p class="text-zinc-400 text-lg">License Plate Recognition & Flagging System</p>
+        <p class="text-zinc-500 text-sm">Educational offline-first system for plate detection, OCR, validation, and alerting.</p>
+      </section>
+
+      <!-- SECTION: Mock-ups -->
+      <section>
+        <h2 class="text-2xl font-bold border-b border-border pb-3 mb-4">Mock-ups</h2>
+
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          <!-- Qt / Tailwind Mock-up -->
+          <div>
+            <div class="flex items-center gap-2 rounded bg-panel border border-border p-3">
+              <i class="fa-solid fa-desktop text-accent"></i>
+              <div>
+                <div class="font-semibold">UI Mockup (Qt / Tailwind)</div>
+                <div class="text-xs text-muted">Desktop interface with C++/Qt backend</div>
+              </div>
+            </div>
+            <div class="mt-3 rounded overflow-hidden bg-surface border border-border">
+              <a href="index.html"
+                class="block rounded bg-gradient-to-b from-surface to-panel border border-border hover:brightness-105 transition"
+                target="_blank">
+                <img src="index.html" style="height:200px; object-fit:cover; width:100%; border-radius:4px 4px 0 0">
+              </a>
+              <div class="p-3 text-xs text-muted">Open in new tab</div>
+            </div>
+          </div>
+
+          <!-- openFrameworks Mock-up -->
+          <div>
+            <div class="flex items-center gap-2 rounded bg-panel border border-border p-3">
+              <i class="fa-solid fa-cubes text-accent"></i>
+              <div>
+                <div class="font-semibold">OF Mockup (openFrameworks / ofxImGui)</div>
+                <div class="text-xs text-muted">Immediate-mode GUI, single window</div>
+              </div>
+            </div>
+            <div class="mt-3 rounded overflow-hidden bg-surface border border-border">
+              <a href="of_mockup.html"
+                class="block rounded bg-gradient-to-b from-surface to-panel border border-border hover:brightness-105 transition"
+                target="_blank">
+                <img src="of_mockup.html" style="height:200px; object-fit:cover; width:100%; border-radius:4px 4px 0 0">
+              </a>
+              <div class="p-3 text-xs text-muted">Open in new tab</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECTION: Architecture Docs -->
+      <section>
+        <h2 class="text-2xl font-bold border-b border-border pb-3 mb-4">Architecture Documentation</h2>
+
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          <!-- Qt Architecture -->
+          <div>
+            <div class="flex items-center gap-2 rounded bg-panel border border-border p-3">
+              <i class="fa-solid fa-network-wired text-accent"></i>
+              <div>
+                <div class="font-semibold">ARCHITECTURE.md</div>
+                <div class="text-xs text-muted">Qt / C++ architecture</div>
+              </div>
+            </div>
+            <div class="mt-3">
+              <a href="ARCHITECTURE.md"
+                class="text-accent underline hover:text-ok focus:outline-none"
+                target="_blank">
+                View architecture doc
+              </a>
+            </div>
+          </div>
+
+          <!-- openFrameworks Architecture -->
+          <div>
+            <div class="flex items-center gap-2 rounded bg-panel border border-border p-3">
+              <i class="fa-solid fa-brain text-accent"></i>
+              <div>
+                <div class="font-semibold">ARCHITECTURE_OF.md</div>
+                <div class="text-xs text-muted">openFrameworks / ofxImGui architecture</div>
+              </div>
+            </div>
+            <div class="mt-3">
+              <a href="ARCHITECTURE_OF.md"
+                class="text-accent underline hover:text-ok focus:outline-none"
+                target="_blank">
+                View architecture doc
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECTION: Quick Links -->
+      <section>
+        <h2 class="text-2xl font-bold border-b border-border pb-3 mb-4">Quick Links</h2>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <a href="index.html"
+              class="flex items-center gap-2 rounded bg-accent/20 border border-accent px-3 py-2 text-accent hover:bg-accent/30 transition flex-wrap">
+              <i class="fa-solid fa-desktop"></i>
+              <span>UI Mockup (Tailwind)</span>
+            </a>
+          </div>
+          <div>
+            <a href="of_mockup.html"
+              class="flex items-center gap-2 rounded bg-accent/20 border border-accent px-3 py-2 text-accent hover:bg-accent/30 transition flex-wrap">
+              <i class="fa-solid fa-cubes"></i>
+              <span>OF Mockup (ofxImGui)</span>
+            </a>
+          </div>
+          <div>
+            <a href="ARCHITECTURE.md"
+              class="flex items-center gap-2 rounded bg-panel border border-border px-3 py-2 text-zinc-300 hover:bg-panel/50 transition flex-wrap">
+              <i class="fa-solid fa-database"></i>
+              <span>Architecture (Qt)</span>
+            </a>
+          </div>
+          <div>
+            <a href="ARCHITECTURE_OF.md"
+              class="flex items-center gap-2 rounded bg-panel border border-border px-3 py-2 text-zinc-300 hover:bg-panel/50 transition flex-wrap">
+              <i class="fa-solid fa-brain"></i>
+              <span>Architecture (OF)</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-surface border-t border-border pt-6 text-xs text-muted">
+      <div class="flex flex-col md:flex-row justify-between items-center gap-3 px-4">
+        <div>
+          <a href="index.html"
+            class="font-medium hover:text-accent transition">Argus Project</a>
+          <span class="ml-1">v0.1.0</span>
+        </div>
+        <div>
+          <a href="ARCHITECTURE.md"
+            class="hover:text-accent transition">ARCHITECTURE.md</a>
+          <span class="ml-1">·</span>
+          <a href="ARCHITECTURE_OF.md"
+            class="hover:text-accent transition">ARCHITECTURE_OF.md</a>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    tailwind.config = {darkMode: 'class', theme: {extend: {colors: {bg: '#1e1e2e', surface: '#282a36', panel: '#313244', border: '#44475a', accent: '#8be9fd', danger: '#ff5555', warn: '#ffb86c', ok: '#50fa7b', muted: '#6272a4'}}}}
+  </script>
+</body>
+</html>
