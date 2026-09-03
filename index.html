@@ -1,0 +1,1625 @@
+<!-- Argus - License Plate Recognition & Flagging System - UI Mockup -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus – License Plate Recognition &amp; Flagging System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    tailwind.config = {darkMode: 'class', theme: {extend: {colors: {bg: '#1e1e2e', surface: '#282a36', panel: '#313244', border: '#44475a', accent: '#8be9fd', danger: '#ff5555', warn: '#ffb86c', ok: '#50fa7b', muted: '#6272a4'}}}}
+  </script>
+  <style>
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #44475a #282a36
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #44475a;
+      border-radius: 8px
+    }
+
+    .range {
+      accent-color: #8be9fd
+    }
+
+    @media (max-width:768px) {
+      #view-scan {
+        height: auto !important
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-bg text-zinc-100 min-h-screen flex flex-col select-none">
+  <!-- TOP BAR -->
+  <header
+    class="h-14 bg-surface border-b border-border flex items-center justify-between px-4 shrink-0 sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded bg-accent flex items-center justify-center text-bg font-black">A</div>
+      <div>
+        <div class="font-bold leading-none tracking-wide">ARGUS</div>
+        <div class="text-[10px] tracking-[0.18em] text-muted -mt-0.5">LICENSE PLATE RECOGNITION</div>
+      </div>
+      <span class="ml-4 hidden md:inline-flex text-xs bg-panel border border-border px-2 py-1 rounded">v0.1.0 • Student
+        Project</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <div id="headerMem"
+        class="hidden lg:flex items-center gap-2 bg-panel border border-border rounded-full px-2.5 py-1 cursor-pointer hover:border-accent"
+        onclick="switchView('dashboard'); document.getElementById('memoryPanel')?.scrollIntoView({behavior:'smooth',block:'center'})"
+        title="Memory usage – click for details">
+        <i class="fa-solid fa-microchip text-accent text-xs"></i>
+        <span class="text-[11px] font-bold tracking-widest text-muted">MEM</span>
+        <div class="w-16 md:w-20 h-1.5 bg-bg rounded-full overflow-hidden border border-border">
+          <div id="headerMemBar" class="h-full bg-ok transition-all duration-500" style="width:34%"></div>
+        </div>
+        <span id="headerMemText" class="text-xs font-mono font-bold">1.4GB</span>
+        <span id="headerMemPct" class="text-[11px] font-mono text-muted">34%</span>
+      </div>
+      <button id="alertBell" aria-label="View alerts"
+        class="relative w-9 h-9 rounded bg-panel border border-border flex items-center justify-center hover:border-accent">
+        <i class="fa-regular fa-bell"></i><span id="bellDot"
+          class="absolute -top-1 -right-1 w-5 h-5 bg-danger rounded-full text-xs flex items-center justify-center">3</span>
+      </button>
+      <div class="hidden sm:flex items-center gap-2 bg-panel border border-border rounded-full pl-2 pr-3 py-1">
+        <img src="https://i.pravatar.cc/100?img=12" class="w-6 h-6 rounded-full" alt="operator avatar">
+        <span class="text-sm">operator_1</span><span
+          class="text-xs bg-ok/20 text-ok px-1.5 py-0.5 rounded">Operator</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 min-h-0">
+    <!-- SIDEBAR DESKTOP -->
+    <nav class="w-[220px] shrink-0 bg-surface border-r border-border hidden md:flex flex-col p-3 gap-1">
+      <button data-view="dashboard"
+        class="navBtn flex items-center gap-3 px-3 py-2.5 rounded bg-accent text-bg font-semibold"><i
+          class="fa-solid fa-table-columns w-5"></i> Dashboard</button>
+      <button data-view="scan"
+        class="navBtn flex items-center gap-3 px-3 py-2.5 rounded hover:bg-panel text-zinc-300"><i
+          class="fa-solid fa-camera w-5"></i> Scan Image</button>
+      <button data-view="flagged"
+        class="navBtn flex items-center gap-3 px-3 py-2.5 rounded hover:bg-panel text-zinc-300"><i
+          class="fa-solid fa-flag w-5"></i> Flagged Plates <span
+          class="ml-auto bg-panel border border-border text-xs px-1.5 py-0.5 rounded"
+          id="flagCountBadge">4</span></button>
+      <button data-view="logs"
+        class="navBtn flex items-center gap-3 px-3 py-2.5 rounded hover:bg-panel text-zinc-300"><i
+          class="fa-solid fa-list w-5"></i> Logs &amp; Alerts</button>
+      <button data-view="settings"
+        class="navBtn flex items-center gap-3 px-3 py-2.5 rounded hover:bg-panel text-zinc-300"><i
+          class="fa-solid fa-gear w-5"></i> Settings</button>
+      <div id="sidebarMem" class="mt-2 p-2.5 rounded bg-panel border border-border space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5 text-xs font-bold tracking-widest"><i
+              class="fa-solid fa-microchip text-accent"></i> MEMORY</div>
+          <span id="sidebarMemText" class="text-xs font-mono font-bold">1.4 / 4.0 GB</span>
+        </div>
+        <div class="w-full h-2 bg-bg rounded-full overflow-hidden border border-border">
+          <div id="sidebarMemBar" class="h-full bg-ok transition-all duration-500" style="width:34%"></div>
+        </div>
+        <div class="flex justify-between text-[11px] font-mono"><span id="sidebarMemPct"
+            class="text-ok font-bold">34%</span><span class="text-muted">peak 2.1GB</span></div>
+        <div class="grid grid-cols-2 gap-1 text-[10px] leading-tight">
+          <div class="bg-bg border border-border rounded px-1.5 py-1"><span class="text-muted">Images</span><br><span
+              id="sidebarMemImages" class="font-mono font-bold">420 MB</span></div>
+          <div class="bg-bg border border-border rounded px-1.5 py-1"><span class="text-muted">Video buf</span><br><span
+              id="sidebarMemVideo" class="font-mono font-bold">180 MB</span></div>
+        </div>
+        <button onclick="clearMemoryCache()"
+          class="w-full py-1 rounded bg-bg border border-border text-[11px] hover:border-accent"><i
+            class="fa-solid fa-broom mr-1"></i> Clear cache</button>
+      </div>
+      <div class="mt-auto p-3 rounded bg-panel border border-border text-xs leading-relaxed">
+        <div class="font-semibold flex items-center gap-2"><i class="fa-solid fa-circle-info text-accent"></i>
+          Implementation</div>
+        C++17 • OpenCV • Qt<br>Single window • Tabs
+      </div>
+      <div class="pt-3 mt-2 border-t border-border text-[11px] text-muted">
+        <div class="font-semibold text-zinc-300 mb-1">Shortcuts</div>
+        R=Re-scan • Enter=Save<br>Space=Play/Pause • ←→ Seek
+      </div>
+    </nav>
+
+    <!-- MOBILE NAV -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-border flex z-40">
+      <button data-view="dashboard" class="navBtn flex-1 py-3 flex flex-col items-center gap-1 text-accent"><i
+          class="fa-solid fa-table-columns"></i><span class="text-[10px]">Dashboard</span></button>
+      <button data-view="scan" class="navBtn flex-1 py-3 flex flex-col items-center gap-1 text-muted"><i
+          class="fa-solid fa-camera"></i><span class="text-[10px]">Scan</span></button>
+      <button data-view="flagged" class="navBtn flex-1 py-3 flex flex-col items-center gap-1 text-muted"><i
+          class="fa-solid fa-flag"></i><span class="text-[10px]">Flagged</span></button>
+      <button data-view="logs" class="navBtn flex-1 py-3 flex flex-col items-center gap-1 text-muted"><i
+          class="fa-solid fa-list"></i><span class="text-[10px]">Logs</span></button>
+      <button data-view="settings" class="navBtn flex-1 py-3 flex flex-col items-center gap-1 text-muted"><i
+          class="fa-solid fa-gear"></i><span class="text-[10px]">Settings</span></button>
+    </div>
+
+    <!-- MAIN -->
+    <main class="flex-1 min-w-0 bg-bg overflow-auto pb-16 md:pb-0">
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h1 class="text-xl font-bold">Dashboard</h1>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="px-2 py-1 rounded bg-panel border border-border">Last sync: 14:32:07</span>
+            <button onclick="switchView('scan')"
+              class="px-3 py-1.5 rounded bg-accent text-bg font-semibold hover:brightness-110"><i
+                class="fa-solid fa-plus mr-1"></i> New Scan</button>
+          </div>
+        </div>
+
+        <!-- DROP ZONE -->
+        <div id="dropZone"
+          class="rounded-xl border-2 border-dashed border-border bg-surface p-8 md:p-10 text-center hover:border-accent/60 hover:bg-panel/50 transition cursor-pointer">
+          <div
+            class="w-14 h-14 rounded-full bg-panel border border-border flex items-center justify-center mx-auto text-xl">
+            <i class="fa-solid fa-cloud-arrow-up text-accent"></i>
+          </div>
+          <div class="mt-3 font-semibold text-lg">Drag &amp; drop vehicle media here <span
+              class="text-muted font-normal">or</span> <span class="text-accent underline">click to browse</span></div>
+          <div class="text-xs text-muted mt-1">JPG, PNG, BMP, MP4, WEBM • Max 50MB • Images or video</div>
+          <div class="mt-4 flex flex-wrap gap-2 justify-center">
+            <span class="text-xs bg-bg border border-border px-2 py-1 rounded">Sample: car1.jpg</span>
+            <span class="text-xs bg-bg border border-border px-2 py-1 rounded">Sample: car2.jpg</span>
+            <span class="text-xs bg-bg border border-border px-2 py-1 rounded">Sample: traffic.mp4</span>
+            <button onclick="startBatchDemo()"
+              class="text-xs bg-accent/20 border border-accent/30 text-accent px-2 py-1 rounded hover:bg-accent/30"><i
+                class="fa-solid fa-layer-group mr-1"></i> Demo batch 10</button>
+          </div>
+          <input id="fileInput" type="file" accept="image/*,video/*" multiple hidden>
+        </div>
+
+        <!-- STATS -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="rounded-xl bg-surface border border-border p-4 flex items-center justify-between">
+            <div>
+              <div class="text-2xl font-black">147</div>
+              <div class="text-xs text-muted">Total scans today</div>
+              <div class="text-xs text-ok mt-1">↑ 12% vs yesterday</div>
+            </div>
+            <div class="w-10 h-10 rounded bg-accent/20 flex items-center justify-center text-accent"><i
+                class="fa-solid fa-chart-simple"></i></div>
+          </div>
+          <div class="rounded-xl bg-surface border border-border p-4 flex items-center justify-between">
+            <div>
+              <div class="text-2xl font-black text-danger">12</div>
+              <div class="text-xs text-muted">Flagged matches</div>
+              <div class="text-xs text-danger mt-1">3 in last hour</div>
+            </div>
+            <div class="w-10 h-10 rounded bg-danger/20 flex items-center justify-center text-danger"><i
+                class="fa-solid fa-triangle-exclamation"></i></div>
+          </div>
+          <div class="rounded-xl bg-surface border border-border p-4 flex items-center justify-between">
+            <div>
+              <div class="text-2xl font-black text-warn">8</div>
+              <div class="text-xs text-muted">Low confidence reads</div>
+              <div class="text-xs text-warn mt-1">needs review</div>
+            </div>
+            <div class="w-10 h-10 rounded bg-warn/20 flex items-center justify-center text-warn"><i
+                class="fa-solid fa-eye-low-vision"></i></div>
+          </div>
+          <div class="rounded-xl bg-danger/10 border border-danger/30 p-4 flex items-center justify-between">
+            <div>
+              <div class="text-2xl font-black text-danger">3</div>
+              <div class="text-xs text-muted">Active alerts</div>
+              <div class="text-xs text-danger mt-1">● live</div>
+            </div>
+            <div class="w-10 h-10 rounded bg-danger flex items-center justify-center text-white animate-pulse"><i
+                class="fa-solid fa-bell"></i></div>
+          </div>
+        </div>
+
+        <!-- MEMORY USAGE – DASHBOARD -->
+        <div id="memoryPanel" class="rounded-xl bg-surface border border-border overflow-hidden">
+          <div class="px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel/30">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded bg-accent/20 border border-accent/30 flex items-center justify-center text-accent">
+                <i class="fa-solid fa-microchip"></i>
+              </div>
+              <div>
+                <div class="font-bold leading-none">Memory Usage <span
+                    class="ml-2 text-xs font-normal px-2 py-0.5 rounded bg-ok/20 text-ok border border-ok/30">Healthy</span>
+                </div>
+                <div class="text-xs text-muted">OpenCV mats • video buffers • OCR engine • logs</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="hidden sm:inline text-xs bg-bg border border-border px-2 py-1 rounded font-mono"><span
+                  id="memUsed">1.42</span> / <span id="memTotal">4.00</span> GB</span>
+              <button onclick="clearMemoryCache()"
+                class="text-xs bg-panel border border-border px-2.5 py-1.5 rounded hover:border-accent"><i
+                  class="fa-solid fa-broom mr-1"></i> Clear cache</button>
+              <button onclick="simulateMemorySpike()"
+                class="text-xs bg-warn/20 border border-warn/30 text-warn px-2.5 py-1.5 rounded hover:bg-warn/30">Simulate
+                spike</button>
+            </div>
+          </div>
+          <div class="p-4 grid lg:grid-cols-[320px_1fr_280px] gap-4">
+            <!-- Gauge -->
+            <div class="bg-panel border border-border rounded-xl p-4 flex flex-col items-center">
+              <div class="relative w-36 h-36">
+                <svg class="w-36 h-36 -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="#313244" stroke-width="10" />
+                  <circle id="memGauge" cx="50" cy="50" r="42" fill="none" stroke="#50fa7b" stroke-width="10"
+                    stroke-linecap="round" stroke-dasharray="263.89" stroke-dashoffset="174"
+                    class="transition-all duration-700" />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <div id="memPct" class="text-2xl font-black">34%</div>
+                  <div class="text-[11px] tracking-widest text-muted">USED</div>
+                  <div id="memStatus" class="text-[11px] font-bold text-ok mt-1">OK • headroom 2.6GB</div>
+                </div>
+              </div>
+              <div class="w-full mt-3 space-y-2 text-xs">
+                <div class="flex justify-between"><span class="text-muted">Peak (session)</span><span id="memPeak"
+                    class="font-mono font-bold">2.14 GB</span></div>
+                <div class="flex justify-between"><span class="text-muted">Limit (Settings)</span><span
+                    class="font-mono">3.20 GB</span></div>
+                <div class="w-full h-1.5 bg-bg rounded-full overflow-hidden border border-border">
+                  <div id="memBar" class="h-full bg-ok transition-all duration-700" style="width:34%"></div>
+                </div>
+                <div class="flex justify-between text-[11px]"><span class="text-muted">0 GB</span><span
+                    class="text-muted">4 GB</span></div>
+              </div>
+            </div>
+            <!-- Breakdown -->
+            <div class="space-y-3">
+              <div class="text-xs font-bold tracking-widest text-muted">BREAKDOWN</div>
+              <div class="space-y-2">
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">Image buffers</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div id="memImgBar" class="h-full bg-accent" style="width:42%"></div>
+                  </div>
+                  <span id="memImg" class="w-20 text-right text-xs font-mono font-bold">420 MB</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">Video cache</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div id="memVidBar" class="h-full bg-[#bd93f9]" style="width:18%"></div>
+                  </div>
+                  <span id="memVid" class="w-20 text-right text-xs font-mono font-bold">180 MB</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">OCR engine</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div id="memOcrBar" class="h-full bg-warn" style="width:28%"></div>
+                  </div>
+                  <span id="memOcr" class="w-20 text-right text-xs font-mono font-bold">285 MB</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">FlagStore</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div class="h-full bg-muted" style="width:4%"></div>
+                  </div>
+                  <span class="w-20 text-right text-xs font-mono font-bold">12 MB</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">Logs & thrumb</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div class="h-full bg-muted" style="width:12%"></div>
+                  </div>
+                  <span class="w-20 text-right text-xs font-mono">124 MB</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="w-24 text-xs text-muted">Qt / overhead</span>
+                  <div class="flex-1 h-2 bg-bg rounded-full overflow-hidden border border-border">
+                    <div class="h-full bg-muted" style="width:22%"></div>
+                  </div>
+                  <span class="w-20 text-right text-xs font-mono">210 MB</span>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-2 pt-2">
+                <div class="bg-bg border border-border rounded p-2 text-center">
+                  <div class="text-[11px] text-muted">Images cached</div>
+                  <div id="memImgCount" class="font-mono font-bold">12</div>
+                </div>
+                <div class="bg-bg border border-border rounded p-2 text-center">
+                  <div class="text-[11px] text-muted">Video frames</div>
+                  <div id="memFrameCount" class="font-mono font-bold">0</div>
+                </div>
+                <div class="bg-bg border border-border rounded p-2 text-center">
+                  <div class="text-[11px] text-muted">GC runs</div>
+                  <div id="memGcCount" class="font-mono font-bold">4</div>
+                </div>
+              </div>
+            </div>
+            <!-- History + actions -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold tracking-widest text-muted">HISTORY (5 MIN)</div>
+                <span class="text-[11px] px-1.5 py-0.5 rounded bg-panel border border-border font-mono">live</span>
+              </div>
+              <div class="bg-bg border border-border rounded p-2">
+                <div id="memSparkline" class="flex items-end gap-[2px] h-16">
+                  <!-- bars injected by JS -->
+                </div>
+                <div class="flex justify-between text-[10px] text-muted mt-1"><span>-5m</span><span>now</span></div>
+              </div>
+              <div class="space-y-1.5 text-xs">
+                <div class="flex items-center gap-2 p-2 rounded bg-ok/10 border border-ok/20 text-ok"><i
+                    class="fa-solid fa-circle-check"></i> Below 60% – optimal for batch processing</div>
+                <div id="memWarn"
+                  class="hidden flex items-center gap-2 p-2 rounded bg-warn/10 border border-warn/20 text-warn"><i
+                    class="fa-solid fa-triangle-exclamation"></i> <span>High memory – consider clearing cache</span>
+                </div>
+                <div id="memDanger"
+                  class="hidden flex items-center gap-2 p-2 rounded bg-danger/10 border border-danger/20 text-danger"><i
+                    class="fa-solid fa-circle-exclamation"></i> <span>Critical – auto spill to disk enabled</span></div>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="clearMemoryCache()"
+                  class="flex-1 py-1.5 rounded bg-panel border border-border text-xs hover:border-accent"><i
+                    class="fa-solid fa-broom mr-1"></i> Clear image cache</button>
+                <button onclick="toast('Memory limit saved to Settings','ok')"
+                  class="flex-1 py-1.5 rounded bg-accent text-bg text-xs font-semibold">Manage limit</button>
+              </div>
+              <div class="text-[11px] text-muted leading-tight">Tip: Video uses ~30 MB per 10s @ 720p, 30fps. Lower
+                <em>Video cache limit</em> in Settings to cap usage.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RECENT SCANS -->
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <div class="px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border">
+            <div class="font-semibold">Recent Scans <span class="text-xs font-normal text-muted ml-2">click row → Scan
+                view</span></div>
+            <div class="flex items-center gap-2">
+              <button class="text-xs bg-panel border border-border px-2 py-1 rounded"><i
+                  class="fa-solid fa-filter mr-1"></i> Filter</button>
+              <button onclick="exportLogs()" class="text-xs bg-panel border border-border px-2 py-1 rounded">Export
+                CSV</button>
+            </div>
+          </div>
+          <div class="overflow-auto">
+            <table class="w-full text-sm min-w-[520px]">
+              <thead class="text-xs text-muted border-b border-border bg-panel/50">
+                <tr>
+                  <th class="text-left p-3">Thumbnail</th>
+                  <th class="text-left p-3">Plate</th>
+                  <th class="text-left p-3">Confidence</th>
+                  <th class="text-left p-3">Time</th>
+                  <th class="text-left p-3">Status</th>
+                  <th class="p-3"></th>
+                </tr>
+              </thead>
+              <tbody id="recentBody" class="divide-y divide-border"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCAN VIEW -->
+      <section id="view-scan" class="view hidden flex flex-col min-h-[calc(100vh-56px)]">
+        <!-- Scan toolbar for mobile/tablet: toggle drawers -->
+        <div class="flex md:hidden items-center gap-2 px-3 py-2 bg-surface border-b border-border text-xs">
+          <button onclick="toggleScanDrawer('left')" class="flex-1 py-2 rounded bg-panel border border-border"><i
+              class="fa-solid fa-images mr-1"></i> Media</button>
+          <button onclick="toggleScanDrawer('right')" class="flex-1 py-2 rounded bg-panel border border-border"><i
+              class="fa-solid fa-sliders mr-1"></i> Actions</button>
+          <span class="ml-auto text-muted">3-panel • swipe</span>
+        </div>
+        <div class="flex flex-1 min-h-0 flex-col md:flex-row">
+          <!-- LEFT -->
+          <aside id="scanLeft"
+            class="w-full md:w-[280px] lg:w-[300px] shrink-0 bg-surface border-r border-border flex flex-col hidden md:flex">
+            <div class="p-3 border-b border-border">
+              <div id="scanDropMini"
+                class="rounded-lg border-2 border-dashed border-border bg-panel p-4 text-center cursor-pointer hover:border-accent">
+                <i class="fa-solid fa-photo-film text-accent"></i>
+                <div class="text-xs mt-1">Drop media or <span class="text-accent underline">browse</span></div>
+                <div class="text-[11px] text-muted">Images &amp; video</div>
+              </div>
+              <button onclick="document.getElementById('fileInput').click()"
+                class="mt-2 w-full py-1.5 rounded bg-accent text-bg text-sm font-semibold">Browse Files</button>
+            </div>
+            <div class="px-3 py-2 text-xs font-semibold tracking-widest text-muted flex items-center justify-between">
+              LOADED MEDIA <span id="loadedCount" class="bg-panel border border-border px-1.5 py-0.5 rounded">4</span>
+            </div>
+            <!-- Video progress bar (hidden until video loaded) -->
+            <div id="videoProgress" class="hidden mx-2 mb-2 p-2 rounded bg-panel border border-border">
+              <div class="flex items-center justify-between text-[11px] font-semibold"><span><i
+                    class="fa-solid fa-video mr-1"></i> Video</span><span id="videoDuration"
+                  class="font-mono text-muted">00:00</span></div>
+              <input type="range" id="seekBar" class="range w-full mt-1" min="0" max="100" value="0">
+              <div class="flex justify-between text-[11px] text-muted"><span id="seekTime">00:00</span><span
+                  id="frameTimeMini">00:00:00</span></div>
+            </div>
+            <!-- Batch progress (hidden until batch) -->
+            <div id="batchProgress"
+              class="hidden mx-2 mb-2 p-2 rounded bg-accent/10 border border-accent/30 space-y-1.5">
+              <div class="flex justify-between text-xs"><span class="font-bold flex items-center gap-1.5"><i
+                    class="fa-solid fa-spinner fa-spin text-accent"></i> Batch 3/10</span><span id="batchPct"
+                  class="font-mono font-bold">30%</span></div>
+              <div class="w-full h-1.5 bg-bg rounded-full overflow-hidden border border-border">
+                <div id="batchBar" class="h-full bg-accent transition-all duration-300" style="width:30%"></div>
+              </div>
+              <div class="flex items-center gap-1.5"><button onclick="cancelBatch()"
+                  class="flex-1 py-1 rounded bg-bg border border-border text-xs hover:border-danger">Cancel</button><span
+                  class="text-[11px] text-muted">QtConcurrent • 2 threads</span></div>
+              <div class="text-[11px] text-muted">Processing <span id="batchCurrent">traffic_03.jpg</span> • ~1.2s /
+                image</div>
+            </div>
+            <div id="thumbList" class="flex-1 overflow-auto p-2 space-y-2 min-h-[120px]"></div>
+            <div class="p-2 border-t border-border flex gap-2">
+              <button onclick="clearThumbs()" class="flex-1 py-1.5 rounded bg-panel border border-border text-xs">Clear
+                All</button>
+              <button onclick="demoFlaggedScan()"
+                class="flex-1 py-1.5 rounded bg-danger text-white text-xs font-semibold">Demo Flagged</button>
+            </div>
+          </aside>
+
+          <!-- CENTER -->
+          <div class="flex-1 bg-bg flex flex-col min-w-0 min-h-[360px]">
+            <div id="flagBanner"
+              class="hidden bg-danger text-white px-4 py-2 flex items-center gap-2 text-sm font-semibold">
+              <i class="fa-solid fa-triangle-exclamation"></i> FLAGGED PLATE – <span id="flagReason">Stolen vehicle
+                reported 2024-01-15</span> <button onclick="hideBanner()" aria-label="Dismiss"
+                class="ml-auto text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex-1 p-3 md:p-4 flex items-center justify-center bg-[#0f0f17] relative overflow-hidden">
+              <div class="relative max-w-full max-h-full w-full flex items-center justify-center">
+                <!-- Video player appears when video mode is active -->
+                <video id="videoPlayer"
+                  class="hidden max-w-[720px] w-full max-h-[420px] md:max-h-[520px] object-contain rounded border border-border bg-black"
+                  playsinline controls></video>
+                <!-- Fallback image when no video -->
+                <img id="previewImg"
+                  src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&h=500&fit=crop"
+                  alt="vehicle preview"
+                  class="max-w-[720px] w-full max-h-[420px] md:max-h-[520px] object-contain rounded border border-border bg-black">
+                <!-- Bounding boxes -->
+                <div id="bboxNormal"
+                  class="absolute border-2 border-ok bg-ok/20 flex items-end justify-center pb-1 pointer-events-none"
+                  style="left:34%;top:62%;width:32%;height:14%">
+                  <span class="text-[10px] bg-ok text-bg px-1 rounded font-bold">AB123CD</span>
+                </div>
+                <div id="bboxFlagged"
+                  class="hidden absolute border-2 border-danger bg-danger/25 flex items-end justify-center pb-1 pointer-events-none"
+                  style="left:28%;top:60%;width:38%;height:16%">
+                  <span class="text-[10px] bg-danger text-white px-1 rounded font-bold">AB123CD • FLAGGED</span>
+                </div>
+                <!-- Overlay badge -->
+                <div
+                  class="absolute top-3 left-3 bg-black/75 backdrop-blur rounded px-3 py-2 text-xs space-y-1 border border-white/10 min-w-[180px]">
+                  <div>Plate: <span id="badgePlate" class="font-mono font-bold text-accent">AB123CD</span> <span
+                      id="badgeRegion"
+                      class="ml-1 px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 text-[10px] font-bold">EU</span>
+                    <span id="badgeNorm" class="text-[10px] text-ok ml-1">✓ norm</span>
+                  </div>
+                  <div>Confidence: <span id="badgeConf" class="font-bold text-ok">92%</span> <span id="badgeLow"
+                      class="text-[11px] text-warn">low: ‘B’ 64%</span> <span id="badgeErr"
+                      class="hidden text-[11px] text-danger">OCR failed</span></div>
+                  <div id="badgePerChar" class="flex gap-0.5 flex-wrap">
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">A
+                      98%</span>
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">B
+                      64%</span>
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">1
+                      94%</span>
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">2
+                      91%</span>
+                    <span class="px-1 py-0.5 rounded bg-warn/20 text-warn border border-warn/30 font-mono text-[10px]">3
+                      88%</span>
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">C
+                      96%</span>
+                    <span class="px-1 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-mono text-[10px]">D
+                      93%</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 text-[11px]"><span class="text-muted">Validator:</span><span
+                      id="badgeValid" class="px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-bold">✓ EU
+                      valid</span><span class="text-muted">• O→0, I→1</span></div>
+                </div>
+                <div class="absolute bottom-3 right-3 flex gap-2">
+                  <button aria-label="Zoom in"
+                    class="w-8 h-8 rounded bg-black/70 border border-white/10 flex items-center justify-center hover:bg-black"><i
+                      class="fa-solid fa-magnifying-glass-plus text-xs"></i></button>
+                  <button aria-label="Fullscreen"
+                    class="w-8 h-8 rounded bg-black/70 border border-white/10 flex items-center justify-center hover:bg-black"><i
+                      class="fa-solid fa-expand text-xs"></i></button>
+                </div>
+              </div>
+            </div>
+            <div
+              class="px-2 md:px-4 py-2 bg-surface border-t border-border flex flex-wrap items-center gap-1.5 md:gap-2 text-[11px] md:text-xs">
+              <span class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border">Frame: <span
+                  id="frameNum">0001</span>/<span id="frameTotal">—</span></span>
+              <span class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border hidden sm:inline">Timestamp: <span
+                  id="frameTime">00:00:00</span></span>
+              <span class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border">ROI x:234 y:412 w:156 h:48</span>
+              <span class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border">OCR: 247ms</span>
+              <span class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border hidden lg:inline">Detector: OpenCV
+                4.8</span>
+              <span id="scanMemBadge"
+                class="px-1.5 md:px-2 py-1 rounded bg-panel border border-border flex items-center gap-1"><i
+                  class="fa-solid fa-microchip text-[10px]"></i> Mem: <span id="scanMem"
+                  class="font-mono font-bold">342</span> MB</span>
+              <span class="ml-auto text-muted hidden md:inline">Shortcuts: Space=Play/Pause • ←→ Seek •
+                R=Re-process</span>
+            </div>
+          </div>
+
+          <!-- RIGHT -->
+          <aside id="scanRight"
+            class="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-surface border-t lg:border-t-0 lg:border-l border-border flex flex-col hidden lg:flex overflow-auto max-h-[50vh] lg:max-h-none">
+            <div class="p-4 space-y-4">
+              <div>
+                <div class="text-xs font-bold tracking-widest text-muted mb-2">ACTIONS</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button onclick="reScan()"
+                    class="py-2 rounded bg-panel border border-border text-sm hover:border-accent"><i
+                      class="fa-solid fa-rotate mr-1"></i> Re-scan</button>
+                  <button onclick="markReview()" class="py-2 rounded bg-warn text-bg text-sm font-semibold">Mark
+                    Review</button>
+                  <button onclick="openFlagModal()"
+                    class="py-2 rounded bg-panel border border-border text-sm hover:border-accent"><i
+                      class="fa-solid fa-flag mr-1"></i> Add to flagged</button>
+                  <button onclick="exportScan()" class="py-2 rounded bg-panel border border-border text-sm"><i
+                      class="fa-solid fa-download mr-1"></i> Export CSV</button>
+                  <button onclick="simulateOcrFail()"
+                    class="py-1.5 rounded bg-panel border border-border text-xs hover:border-warn"><i
+                      class="fa-solid fa-triangle-exclamation mr-1 text-warn"></i> Simulate OCR fail</button>
+                  <button onclick="simulateCorrupt()"
+                    class="py-1.5 rounded bg-panel border border-border text-xs hover:border-danger"><i
+                      class="fa-solid fa-file-circle-xmark mr-1 text-danger"></i> Corrupt image</button>
+                </div>
+                <div id="batchStatus" class="hidden mt-2 p-2 rounded bg-panel border border-border text-xs space-y-1">
+                  <div class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin text-accent"></i>
+                    <span>Batch 3/10 • QtConcurrent 2 threads</span><button onclick="cancelBatch()"
+                      class="ml-auto text-[11px] px-2 py-0.5 rounded bg-bg border border-border">Cancel</button>
+                  </div>
+                  <div class="w-full h-1.5 bg-bg rounded-full overflow-hidden border border-border">
+                    <div id="batchStatusBar" class="h-full bg-accent" style="width:30%"></div>
+                  </div>
+                </div>
+              </div>
+              <!-- Video controls -->
+              <div id="videoControls"
+                class="hidden flex flex-wrap gap-2 text-xs items-center bg-panel border border-border rounded p-2">
+                <span class="font-semibold"><i class="fa-solid fa-film mr-1"></i> Video</span>
+                <button onclick="processCurrentFrame()"
+                  class="px-2 py-1 rounded bg-bg border border-border hover:border-accent">Process Frame</button>
+                <button onclick="processAllFramesToggle()"
+                  class="px-2 py-1 rounded bg-bg border border-border hover:border-warn">Process All</button>
+                <span class="ml-auto text-muted">Every <span id="frameIntervalVal">1</span> frame</span>
+              </div>
+              <div class="rounded bg-panel border border-border p-3 space-y-2">
+                <div class="text-xs font-bold tracking-widest">MATCH INFO</div>
+                <div class="flex justify-between text-sm"><span class="text-muted">Watchlist Match:</span><span
+                    id="matchVal" class="font-bold text-ok">NO</span></div>
+                <div class="flex justify-between text-sm"><span class="text-muted">Flag Type:</span><span
+                    id="flagTypeVal" class="px-2 py-0.5 rounded bg-panel border border-border text-xs">—</span></div>
+                <div class="text-sm"><span class="text-muted">Reason:</span> <span id="reasonVal"
+                    class="text-xs">—</span></div>
+              </div>
+              <div class="rounded bg-panel border border-border p-2.5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="text-xs font-bold tracking-widest">MEMORY (THIS VIEW)</div>
+                  <span class="text-[11px] px-1.5 py-0.5 rounded bg-bg border border-border font-mono"
+                    id="rightMemTotal">~342 MB</span>
+                </div>
+                <div class="space-y-1.5 text-xs">
+                  <div class="flex justify-between"><span class="text-muted">Current image</span><span id="rightMemImg"
+                      class="font-mono">4.2 MB (1920×1080)</span></div>
+                  <div class="flex justify-between"><span class="text-muted">Decoded mat</span><span
+                      class="font-mono">11.8 MB</span></div>
+                  <div class="flex justify-between"><span class="text-muted">Video buffer</span><span id="rightMemVid"
+                      class="font-mono">0 MB</span></div>
+                </div>
+                <div class="w-full h-1.5 bg-bg rounded-full overflow-hidden border border-border">
+                  <div id="rightMemBar" class="h-full bg-accent transition-all duration-500" style="width:28%"></div>
+                </div>
+                <div class="flex gap-1.5">
+                  <button onclick="clearMemoryCache()"
+                    class="flex-1 py-1 rounded bg-bg border border-border text-xs hover:border-accent">Clear
+                    cache</button>
+                  <span class="text-[11px] text-muted py-1">Auto-free on close</span>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs font-bold tracking-widest text-muted mb-2">DECISION</div>
+                <label
+                  class="flex items-center gap-2 p-2 rounded bg-panel border border-border cursor-pointer has-[:checked]:border-accent has-[:checked]:bg-accent/10">
+                  <input type="radio" name="decision" value="allow" checked> <span class="text-sm">Allow</span> <span
+                    class="ml-auto text-xs text-muted">Normal log</span>
+                </label>
+                <label
+                  class="flex items-center gap-2 p-2 rounded bg-panel border border-border mt-2 cursor-pointer has-[:checked]:border-danger has-[:checked]:bg-danger/10">
+                  <input type="radio" name="decision" value="block"> <span class="text-sm">Block</span> <span
+                    class="ml-auto text-xs text-muted">Flagged</span>
+                </label>
+                <label
+                  class="flex items-center gap-2 p-2 rounded bg-panel border border-border mt-2 cursor-pointer has-[:checked]:border-warn has-[:checked]:bg-warn/10">
+                  <input type="radio" name="decision" value="review"> <span class="text-sm">Manual review</span>
+                </label>
+              </div>
+              <div>
+                <div class="text-xs font-bold tracking-widest text-muted mb-2">OPERATOR NOTES</div>
+                <textarea id="opNotes" rows="3" placeholder="Operator notes (optional)..."
+                  class="w-full rounded bg-bg border border-border p-2 text-sm outline-none focus:border-accent"></textarea>
+              </div>
+              <button onclick="saveDecision()"
+                class="w-full py-2.5 rounded bg-accent text-bg font-bold hover:brightness-110">Save Decision &amp;
+                Log</button>
+              <div class="text-[11px] text-muted text-center">Saved to Logs &amp; Alerts • Triggers alert if flagged
+              </div>
+            </div>
+          </aside>
+        </div>
+        <!-- Mobile thumb strip -->
+        <div class="md:hidden bg-surface border-t border-border p-2 flex gap-2 overflow-auto" id="mobileThumbs"></div>
+      </section>
+
+      <!-- FLAGGED -->
+      <section id="view-flagged" class="view hidden p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
+        <div class="flex flex-wrap gap-3 items-center justify-between">
+          <h1 class="text-xl font-bold">Flagged Plates <span class="text-sm font-normal text-muted">Watchlist /
+              Blacklist</span></h1>
+          <div class="flex items-center gap-2">
+            <span id="flagPersist"
+              class="hidden sm:inline-flex items-center gap-1.5 text-xs bg-ok/10 border border-ok/20 text-ok px-2.5 py-1.5 rounded"><i
+                class="fa-solid fa-floppy-disk"></i> Saved to <code
+                class="bg-bg border border-border px-1 rounded">flagged.json</code> • <span
+                id="flagPersistTime">14:32</span></span>
+            <button onclick="exportFlaggedJson()"
+              class="px-3 py-2 rounded bg-panel border border-border text-sm hover:border-accent"><i
+                class="fa-solid fa-file-code mr-1"></i> Export JSON</button>
+            <button onclick="openFlagModal()" class="px-4 py-2 rounded bg-accent text-bg font-semibold"><i
+                class="fa-solid fa-plus mr-1"></i> Add Flagged Plate</button>
+          </div>
+        </div>
+        <div
+          class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-surface border border-border rounded-xl p-3">
+          <div class="flex items-center gap-2 bg-bg border border-border rounded px-3 py-1.5 flex-1 min-w-0">
+            <i class="fa-solid fa-magnifying-glass text-muted text-xs"></i><input id="flagSearch"
+              placeholder="Search plates, reasons, tags..." class="bg-transparent outline-none text-sm w-full">
+          </div>
+          <div class="flex gap-2">
+            <select id="flagTypeFilter"
+              class="flex-1 sm:flex-none bg-bg border border-border rounded px-2 py-1.5 text-sm">
+              <option value="">All types</option>
+              <option>Blocked</option>
+              <option>Suspicious</option>
+              <option>Authorized</option>
+            </select>
+            <select class="flex-1 sm:flex-none bg-bg border border-border rounded px-2 py-1.5 text-sm">
+              <option>All statuses</option>
+              <option>Active</option>
+              <option>Inactive</option>
+            </select>
+          </div>
+        </div>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <div class="overflow-auto">
+            <table class="w-full text-sm min-w-[720px]">
+              <thead class="text-xs text-muted border-b border-border bg-panel/50">
+                <tr>
+                  <th class="p-3 text-left">Plate</th>
+                  <th class="p-3 text-left">Type</th>
+                  <th class="p-3 text-left">Reason / Description</th>
+                  <th class="p-3 text-left">Added</th>
+                  <th class="p-3 text-left">Last matched</th>
+                  <th class="p-3 text-left">Status</th>
+                  <th class="p-3"></th>
+                </tr>
+              </thead>
+              <tbody id="flagBody" class="divide-y divide-border"></tbody>
+            </table>
+            <div id="flagEmpty" class="hidden p-8 text-center">
+              <div
+                class="w-12 h-12 rounded-full bg-panel border border-border flex items-center justify-center mx-auto text-muted">
+                <i class="fa-solid fa-flag"></i>
+              </div>
+              <div class="font-semibold mt-3">No flagged plates yet</div>
+              <div class="text-sm text-muted">Add your first watchlist entry to enable alerts.</div>
+              <button onclick="openFlagModal()"
+                class="mt-3 px-3 py-1.5 rounded bg-accent text-bg text-sm font-semibold">Add Flagged Plate</button>
+              <div class="text-[11px] text-muted mt-2">Persisted to <code
+                  class="bg-bg border border-border px-1 rounded">resources/flagged.json</code> + SQLite</div>
+            </div>
+          </div>
+          <div class="px-3 py-2 bg-panel/30 border-t border-border flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-muted">Storage:</span><span
+              class="px-2 py-1 rounded bg-bg border border-border font-mono">flagged.json • 4 entries • 2.1 KB</span>
+            <span class="px-2 py-1 rounded bg-bg border border-border font-mono">SQLite • flagged_plates table</span>
+            <span class="ml-auto text-muted">Last fsync: <span id="flagPersistTime2"
+                class="font-mono text-zinc-300">14:32:07</span> • atomic write</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOGS -->
+      <section id="view-logs" class="view hidden p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
+        <div class="flex flex-wrap gap-3 items-center justify-between">
+          <h1 class="text-xl font-bold">Logs &amp; Alerts</h1>
+          <button onclick="exportLogs()" class="px-3 py-1.5 rounded bg-panel border border-border text-sm"><i
+              class="fa-solid fa-file-csv mr-1"></i> Export CSV</button>
+        </div>
+        <div class="bg-surface border border-border rounded-xl p-3 flex flex-wrap gap-2 items-center">
+          <div class="flex items-center gap-1 flex-wrap">
+            <input type="date" value="2024-01-01" class="bg-bg border border-border rounded px-2 py-1.5 text-sm"> <span
+              class="text-muted">—</span> <input type="date" value="2024-01-15"
+              class="bg-bg border border-border rounded px-2 py-1.5 text-sm">
+          </div>
+          <div class="flex items-center gap-2 bg-bg border border-border rounded px-2 py-1.5"><i
+              class="fa-solid fa-magnifying-glass text-muted text-xs"></i><input id="logSearch" placeholder="Plate..."
+              class="bg-transparent outline-none text-sm w-20 sm:w-28"></div>
+          <select id="logStatus" class="bg-bg border border-border rounded px-2 py-1.5 text-sm">
+            <option value="">All</option>
+            <option>Normal</option>
+            <option>Flagged</option>
+            <option>Review</option>
+          </select>
+          <label class="flex items-center gap-2 text-sm ml-auto"><input id="onlyFlagged" type="checkbox"> Only
+            flagged</label>
+        </div>
+        <div class="grid lg:grid-cols-[1fr_280px] gap-4">
+          <div class="rounded-xl bg-surface border border-border overflow-hidden">
+            <div class="overflow-auto max-h-[60vh]">
+              <table class="w-full text-sm min-w-[780px]">
+                <thead class="sticky top-0 bg-panel/80 backdrop-blur text-xs text-muted border-b border-border">
+                  <tr>
+                    <th class="p-3 text-left">Time</th>
+                    <th class="p-3 text-left">Img</th>
+                    <th class="p-3 text-left">Plate</th>
+                    <th class="p-3 text-left">Confidence</th>
+                    <th class="p-3 text-left">Flag</th>
+                    <th class="p-3 text-left">Type</th>
+                    <th class="p-3 text-left">Region</th>
+                    <th class="p-3 text-left">Decision</th>
+                    <th class="p-3 text-left">Op</th>
+                  </tr>
+                </thead>
+                <tbody id="logBody" class="divide-y divide-border"></tbody>
+              </table>
+            </div>
+            <div class="px-3 py-2 border-t border-border flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span class="text-muted">Page 1 of 12 • 50 rows/page</span>
+              <div class="flex gap-1"><button
+                  class="px-2 py-1 rounded bg-panel border border-border">Prev</button><button
+                  class="px-2 py-1 rounded bg-accent text-bg">Next</button></div>
+            </div>
+          </div>
+          <div class="rounded-xl bg-surface border border-border p-3 h-fit">
+            <div class="font-semibold text-sm flex items-center gap-2"><i class="fa-solid fa-bell text-danger"></i>
+              Recent Alerts <span class="ml-auto text-xs bg-danger text-white px-1.5 py-0.5 rounded">10</span></div>
+            <div id="recentAlerts" class="mt-3 space-y-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view hidden p-4 md:p-6 max-w-[900px] mx-auto space-y-4">
+        <h1 class="text-xl font-bold">Settings</h1>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <button onclick="toggleAcc('accDetect')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel"><span
+              class="font-semibold">Detection Settings</span><i
+              class="fa-solid fa-chevron-down text-muted"></i></button>
+          <div id="accDetect" class="p-4 space-y-4">
+            <div>
+              <div class="flex items-center justify-between text-sm"><span>Confidence Threshold</span><span id="confVal"
+                  class="font-mono bg-bg border border-border px-2 py-0.5 rounded">0.72</span></div>
+              <input id="confRange" type="range" min="0.5" max="0.95" step="0.01" value="0.72"
+                class="w-full range mt-2">
+              <div class="flex justify-between text-xs text-muted"><span>0.50</span><span>0.95</span></div>
+              <div class="text-xs text-muted mt-1">Plates below threshold → marked “Review”</div>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><span class="text-sm">Default
+                Region Format</span><select
+                class="bg-bg border border-border rounded px-2 py-1.5 text-sm w-full sm:w-auto">
+                <option>EU (generic)</option>
+                <option>US (state)</option>
+                <option>UK</option>
+                <option>Custom Regex</option>
+              </select></div>
+          </div>
+        </div>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <button onclick="toggleAcc('accAlert')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel"><span
+              class="font-semibold">Alert Behavior</span><i class="fa-solid fa-chevron-down text-muted"></i></button>
+          <div id="accAlert" class="p-4 space-y-3">
+            <label class="flex items-center gap-3 text-sm"><input type="checkbox" checked> Show popup alert on flagged
+              plate</label>
+            <label class="flex flex-wrap items-center gap-3 text-sm"><span class="flex items-center gap-2"><input
+                  type="checkbox" checked> Play sound</span> <button onclick="testSound()"
+                class="ml-auto text-xs bg-panel border border-border px-2 py-1 rounded">Test Sound 🔊</button></label>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><span class="text-sm">Alert
+                Cooldown (minutes)</span><select
+                class="bg-bg border border-border rounded px-2 py-1.5 text-sm w-full sm:w-auto">
+                <option>5</option>
+                <option>0</option>
+                <option>15</option>
+                <option>60</option>
+              </select></div>
+          </div>
+        </div>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <button onclick="toggleAcc('accPrivacy')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel"><span
+              class="font-semibold">Privacy &amp; Retention</span><i
+              class="fa-solid fa-chevron-down text-muted"></i></button>
+          <div id="accPrivacy" class="p-4 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><span class="text-sm">Data
+                Retention Period</span><select
+                class="bg-bg border border-border rounded px-2 py-1.5 text-sm w-full sm:w-auto">
+                <option>7 days</option>
+                <option selected>30 days</option>
+                <option>90 days</option>
+              </select></div>
+            <label class="flex items-center gap-3 text-sm"><input type="checkbox"> Blur plates in stored
+              thumbnails</label>
+          </div>
+        </div>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <button onclick="toggleAcc('accMemory')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel"><span
+              class="font-semibold">Memory Management</span><i class="fa-solid fa-chevron-down text-muted"></i></button>
+          <div id="accMemory" class="p-4 space-y-4">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="bg-bg border border-border rounded p-3">
+                <div class="text-xs font-bold tracking-widest text-muted mb-2">LIMITS</div>
+                <div class="space-y-3">
+                  <div>
+                    <div class="flex justify-between text-sm"><span>Max process memory</span><span id="memLimitVal"
+                        class="font-mono font-bold">3.20 GB</span></div>
+                    <input id="memLimitRange" type="range" min="1" max="8" step="0.5" value="3.2"
+                      class="w-full range mt-1">
+                    <div class="flex justify-between text-[11px] text-muted"><span>1 GB</span><span>8 GB</span></div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-sm"><span>Image cache limit</span><span class="font-mono">512
+                        MB</span></div>
+                    <input type="range" min="128" max="1024" step="128" value="512" class="w-full range mt-1">
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-sm"><span>Video frame buffer</span><span class="font-mono">24
+                        frames</span></div>
+                    <input type="range" min="8" max="64" step="8" value="24" class="w-full range mt-1">
+                  </div>
+                </div>
+              </div>
+              <div class="bg-bg border border-border rounded p-3">
+                <div class="text-xs font-bold tracking-widest text-muted mb-2">POLICY</div>
+                <div class="space-y-2 text-sm">
+                  <label class="flex items-center gap-2"><input type="checkbox" checked> Auto-clear on memory
+                    >85%</label>
+                  <label class="flex items-center gap-2"><input type="checkbox" checked> Downscale images >4K to
+                    1080p</label>
+                  <label class="flex items-center gap-2"><input type="checkbox"> Keep thumbnails uncompressed</label>
+                  <label class="flex items-center gap-2"><input type="checkbox" checked> Spill video cache to disk when
+                    full</label>
+                  <div class="pt-2 flex gap-2">
+                    <button onclick="clearMemoryCache()"
+                      class="flex-1 py-1.5 rounded bg-panel border border-border text-xs"><i
+                        class="fa-solid fa-broom mr-1"></i> Purge all caches now</button>
+                    <button onclick="toast('Memory policy saved','ok')"
+                      class="flex-1 py-1.5 rounded bg-accent text-bg text-xs font-semibold">Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="bg-panel border border-border rounded p-3 flex flex-wrap items-center gap-2 text-xs">
+              <span class="font-semibold">Current:</span>
+              <span class="px-2 py-1 rounded bg-bg border border-border font-mono"><span
+                  id="settingsMemUsed">1.42</span> GB used</span>
+              <span class="px-2 py-1 rounded bg-bg border border-border font-mono"><span
+                  id="settingsMemPct">34</span>%</span>
+              <span id="settingsMemState" class="px-2 py-1 rounded bg-ok/20 text-ok border border-ok/30">Healthy</span>
+              <span class="ml-auto text-muted">Peak this session: <span id="settingsMemPeak"
+                  class="font-mono text-zinc-300">2.14 GB</span> • Uptime 2h 14m</span>
+            </div>
+            <div class="text-[11px] text-muted">OpenCV holds decoded mats until <code
+                class="bg-bg border border-border px-1 rounded">mat.release()</code>. Argus releases after each OCR + on
+              view switch. Video decoding uses double-buffered queue.</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-surface border border-border p-4">
+          <div class="flex items-center gap-2 font-semibold"><i class="fa-solid fa-lock text-muted"></i> Access Control
+            <span class="text-xs bg-panel border border-border px-2 py-0.5 rounded">Conceptual</span>
+          </div>
+          <div class="text-xs text-muted mt-1">Not implemented in this project; for design only.</div>
+          <ul class="text-sm mt-2 list-disc pl-5 text-muted">
+            <li>Admin – full access</li>
+            <li>Operator – scan, flag mgmt, logs</li>
+            <li>Viewer – read-only</li>
+          </ul>
+        </div>
+        <div class="rounded-xl bg-surface border border-border overflow-hidden">
+          <button onclick="toggleAcc('accTesting')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel"><span
+              class="font-semibold">Testing &amp; Build</span><span
+              class="text-xs bg-ok/20 text-ok border border-ok/30 px-2 py-0.5 rounded">CI ready</span></button>
+          <div id="accTesting" class="p-4 space-y-3">
+            <div class="grid md:grid-cols-2 gap-3 text-sm">
+              <div class="bg-bg border border-border rounded p-3">
+                <div class="font-bold text-xs tracking-widest text-muted mb-2">UNIT TESTS</div>
+                <div class="space-y-1.5">
+                  <div class="flex justify-between"><span>PlateDetector</span><span class="text-ok">✓ 12/12</span></div>
+                  <div class="flex justify-between"><span>PlateOCR</span><span class="text-ok">✓ 8/8</span></div>
+                  <div class="flex justify-between"><span>PlateValidator</span><span class="text-ok">✓ 15/15</span>
+                  </div>
+                  <div class="flex justify-between"><span>FlagStore (incl. fuzzy)</span><span class="text-ok">✓
+                      9/9</span></div>
+                  <div class="flex justify-between"><span>Logger</span><span class="text-warn">● 5/6</span></div>
+                  <div class="w-full h-1.5 bg-panel rounded-full overflow-hidden border border-border mt-2">
+                    <div class="h-full bg-ok" style="width:92%"></div>
+                  </div>
+                  <div class="text-xs text-muted">92% critical-path coverage</div>
+                </div>
+              </div>
+              <div class="bg-bg border border-border rounded p-3">
+                <div class="font-bold text-xs tracking-widest text-muted mb-2">SAMPLE IMAGES</div>
+                <div class="text-xs text-muted mb-2">resources/test_images/ — deterministic, no network</div>
+                <div class="grid grid-cols-2 gap-1.5 text-xs">
+                  <span class="px-2 py-1 rounded bg-panel border border-border">clear_01.jpg</span>
+                  <span class="px-2 py-1 rounded bg-panel border border-border">angled_02.jpg</span>
+                  <span class="px-2 py-1 rounded bg-panel border border-border">night_03.jpg</span>
+                  <span class="px-2 py-1 rounded bg-panel border border-border">no_plate_04.jpg</span>
+                  <span class="px-2 py-1 rounded bg-panel border border-border">video_clip_05.mp4</span>
+                  <span class="px-2 py-1 rounded bg-panel border border-border">noisy_06.jpg</span>
+                </div>
+                <div class="flex gap-2 mt-2">
+                  <button onclick="toast('ctest — 49 tests passed','ok')"
+                    class="flex-1 py-1.5 rounded bg-accent text-bg text-xs font-semibold">Run tests</button>
+                  <button onclick="toast('Generating coverage report…','info')"
+                    class="flex-1 py-1.5 rounded bg-panel border border-border text-xs">Coverage</button>
+                </div>
+              </div>
+            </div>
+            <div class="bg-panel border border-border rounded p-3">
+              <div class="font-mono text-xs">cmake -B build -S . && cmake --build build && cd build && ctest
+                --output-on-failure</div>
+              <div class="flex flex-wrap gap-2 mt-2 text-xs">
+                <span class="px-2 py-1 rounded bg-bg border border-border">CMake 3.16+</span>
+                <span class="px-2 py-1 rounded bg-bg border border-border">C++17</span>
+                <span class="px-2 py-1 rounded bg-bg border border-border">OpenCV 4.8</span>
+                <span class="px-2 py-1 rounded bg-bg border border-border">GitHub Actions</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-surface border border-border p-4">
+          <div class="font-semibold">About</div>
+          <div class="text-sm text-muted mt-1">Argus Mockup v0.1.0 – GUDS s-01141 . s-01124</div>
+          <div class="flex flex-wrap gap-2 mt-3"><button
+              class="text-xs bg-panel border border-border px-3 py-1.5 rounded">View License</button><button
+              class="text-xs bg-panel border border-border px-3 py-1.5 rounded">GitHub</button><button
+              class="text-xs bg-panel border border-border px-3 py-1.5 rounded"
+              onclick="switchView('dashboard'); document.getElementById('memoryPanel').scrollIntoView({behavior:'smooth'})">Memory
+              docs</button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- TOAST STACK -->
+  <div id="toastStack" class="fixed top-[60px] right-3 z-50 space-y-2 w-[360px] max-w-[92vw]"></div>
+
+  <!-- FLAG MODAL -->
+  <div id="flagModal"
+    class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-surface border border-border rounded-xl w-full max-w-[520px] overflow-hidden">
+      <div class="px-5 py-3 border-b border-border flex items-center justify-between">
+        <div class="font-bold">Add / Edit Flagged Plate</div><button onclick="closeFlagModal()" aria-label="Close"
+          class="w-8 h-8 rounded bg-panel border border-border"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="flagForm" class="p-5 space-y-3">
+        <div><label class="text-xs font-bold tracking-widest">PLATE NUMBER *</label><input id="fPlate" required
+            placeholder="AB123CD"
+            class="mt-1 w-full bg-bg border border-border rounded px-3 py-2 font-mono uppercase outline-none focus:border-accent">
+          <div id="flagNormalizePreview"
+            class="mt-1.5 p-2 rounded bg-bg border border-border flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-muted">Normalized:</span> <span id="flagNormText" class="font-mono font-bold">—</span>
+            <span id="flagRegionChip"
+              class="px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 text-[10px] font-bold">EU</span>
+            <span id="flagValidChip" class="px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 text-[10px]">✓
+              valid</span>
+          </div>
+          <div class="text-[11px] text-muted">Auto: O→0, I→1, 5→S, trim spaces. Region from Settings • <span
+              class="underline cursor-pointer hover:text-accent"
+              onclick="closeFlagModal(); switchView('settings')">Change</span></div>
+        </div>
+        <div><label class="text-xs font-bold tracking-widest">FLAG TYPE *</label><select id="fType"
+            class="mt-1 w-full bg-bg border border-border rounded px-3 py-2 outline-none focus:border-accent">
+            <option>BLOCKED</option>
+            <option>SUSPICIOUS</option>
+            <option>AUTHORIZED</option>
+          </select></div>
+        <div><label class="text-xs font-bold tracking-widest">REASON / DESCRIPTION *</label><textarea id="fReason"
+            required rows="3" placeholder="Stolen vehicle – reported by..."
+            class="mt-1 w-full bg-bg border border-border rounded px-3 py-2 outline-none focus:border-accent"></textarea>
+        </div>
+        <div><label class="text-xs font-bold tracking-widest">TAGS</label><input id="fTags"
+            placeholder="stolen, investigation"
+            class="mt-1 w-full bg-bg border border-border rounded px-3 py-2 outline-none focus:border-accent"></div>
+        <label class="flex items-center gap-2 text-sm"><input id="fTrigger" type="checkbox" checked> Trigger alert on
+          match</label>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeFlagModal()"
+            class="px-4 py-2 rounded bg-panel border border-border">Cancel</button><button type="submit"
+            class="px-5 py-2 rounded bg-accent text-bg font-bold">Save</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- LOG DETAIL MODAL -->
+  <div id="logModal"
+    class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-surface border border-border rounded-xl w-full max-w-[760px] max-h-[90vh] overflow-auto">
+      <div class="sticky top-0 bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
+        <div class="font-bold">Log Entry Detail</div><button onclick="closeLogModal()" aria-label="Close"
+          class="w-8 h-8 rounded bg-panel border border-border"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="p-5 space-y-4">
+        <img id="logImg" src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&h=500&fit=crop"
+          alt="log detail" class="w-full h-[300px] object-cover rounded border border-border">
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="bg-panel border border-border rounded p-3 text-sm space-y-1">
+            <div class="font-bold text-xs tracking-widest">METADATA</div>
+            <div>Time: <span id="dTime">2024-01-15 14:32:07</span></div>
+            <div>Plate: <span id="dPlate" class="font-mono font-bold">AB123CD</span></div>
+            <div>Conf: <span id="dConf">94%</span></div>
+            <div>Region: EU (generic)</div>
+          </div>
+          <div class="bg-panel border border-border rounded p-3 text-sm space-y-1">
+            <div class="font-bold text-xs tracking-widest">FLAG DETAILS</div>
+            <div id="dFlag">Match: YES • BLOCKED</div>
+            <div id="dReason" class="text-muted text-xs">Stolen vehicle – Metro PD Case #2024-045</div>
+            <div class="text-xs">Tags: <span class="bg-bg border border-border px-1.5 py-0.5 rounded">stolen</span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-panel border border-border rounded p-3">
+          <div class="font-bold text-xs tracking-widest mb-2">DECISION HISTORY</div>
+          <div id="dHistory" class="text-sm space-y-1 font-mono text-xs"></div>
+        </div>
+        <div>
+          <div class="font-bold text-xs tracking-widest mb-2">OPERATOR NOTES</div><textarea id="dNotes" rows="3"
+            class="w-full bg-bg border border-border rounded p-2 text-sm"></textarea><button onclick="saveNotes()"
+            class="mt-2 px-3 py-1.5 rounded bg-accent text-bg text-sm font-semibold">Save Notes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE CONFIRM -->
+  <div id="delModal"
+    class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-surface border border-border rounded-xl w-full max-w-[420px] p-5">
+      <div class="w-10 h-10 rounded-full bg-danger/20 flex items-center justify-center text-danger mx-auto"><i
+          class="fa-solid fa-trash"></i></div>
+      <div class="text-center font-bold mt-3">Delete Flagged Plate?</div>
+      <div class="text-sm text-muted text-center mt-1">Remove <span id="delPlate"
+          class="font-mono font-bold text-white">AB123CD</span> from watchlist? Past logs keep reference but show
+        Inactive.</div>
+      <div class="flex gap-2 mt-4"><button onclick="closeDel()"
+          class="flex-1 py-2 rounded bg-panel border border-border">Cancel</button><button onclick="confirmDel()"
+          class="flex-1 py-2 rounded bg-danger text-white font-bold">Delete</button></div>
+    </div>
+  </div>
+
+  <script>
+    const flagged = [
+      {plate: 'AB123CD', type: 'BLOCKED', reason: 'Stolen vehicle – reported by Metro PD, Case #2024-045', tags: 'stolen, investigation', added: '2024-01-10', matched: '2024-01-15 14:15', status: 'Active', trigger: true},
+      {plate: 'XY987ZT', type: 'SUSPICIOUS', reason: 'Repeated proximity to restricted zone (3x)', tags: 'surveillance', added: '2024-01-12', matched: '2024-01-14 09:30', status: 'Active', trigger: true},
+      {plate: 'KL555MN', type: 'AUTHORIZED', reason: 'Authorized staff parking – Building A access', tags: 'staff, authorized', added: '2023-11-01', matched: 'Never', status: 'Active', trigger: false},
+      {plate: 'QR777QQ', type: 'BLOCKED', reason: 'Expired registration', tags: 'expired', added: '2024-01-05', matched: '2024-01-12 16:45', status: 'Inactive', trigger: false},
+    ];
+    const logs = [
+      {time: '14:32:07', img: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400', plate: 'AB123CD', conf: '94%', flag: true, type: 'BLOCKED', decision: 'Review', op: 'op_1', row: 'bg-danger/10'},
+      {time: '14:15:22', img: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400', plate: 'XY987ZT', conf: '87%', flag: true, type: 'SUSPICIOUS', decision: 'Block', op: 'op_1', row: 'bg-warn/10'},
+      {time: '13:58:01', img: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400', plate: '???', conf: '42%', flag: false, type: '—', decision: 'Review', op: 'op_1', row: ''},
+      {time: '13:42:10', img: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400', plate: 'KL555MN', conf: '91%', flag: true, type: 'AUTHORIZED', decision: 'Allow', op: 'op_1', row: 'bg-ok/10'},
+      {time: '12:55:30', img: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400', plate: 'AB123CD', conf: '89%', flag: true, type: 'BLOCKED', decision: 'Block', op: 'op_2', row: 'bg-danger/10'},
+    ];
+    const recent = [
+      {plate: 'AB123CD', conf: '94%', time: '14:32:07', status: 'Flagged', color: 'danger'},
+      {plate: 'XY987ZT', conf: '87%', time: '14:15:22', status: 'Flagged', color: 'warn'},
+      {plate: 'KL555MN', conf: '91%', time: '13:42:10', status: 'Normal', color: 'ok'},
+      {plate: 'MN444OP', conf: '96%', time: '12:40:11', status: 'Normal', color: 'ok'},
+      {plate: '???', conf: '42%', time: '13:58:01', status: 'Review', color: 'warn'},
+    ];
+
+    let currentScan = {plate: 'AB123CD', conf: '92%', flagged: false, type: 'BLOCKED', reason: 'Stolen vehicle reported 2024-01-15'};
+    let videoSource = null;
+    let processAllFrames = false;
+    let frameInterval = 1;
+    let editIndex = -1, delIndex = -1, selectedLog = null;
+    let memState = {used: 1.42, total: 4.0, peak: 2.14, history: [28, 30, 32, 31, 34, 36, 38, 40, 34, 33, 36, 34, 32, 30, 34, 37, 34], img: 420, vid: 180, ocr: 285, images: 12, frames: 0, gc: 4, limit: 3.2};
+
+    function switchView(v) {
+      document.querySelectorAll('.view').forEach(s => s.classList.add('hidden'));
+      document.getElementById('view-' + v).classList.remove('hidden');
+      document.querySelectorAll('.navBtn').forEach(b => {
+        const is = b.dataset.view === v;
+        b.classList.toggle('bg-accent', is && !b.closest('.md\\:hidden'));
+        b.classList.toggle('text-bg', is && !b.closest('.md\\:hidden'));
+        b.classList.toggle('text-accent', is && !!b.closest('.md\\:hidden'));
+      });
+      if (v === 'scan') renderThumbs();
+    }
+    document.querySelectorAll('.navBtn').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+
+    function renderRecent() {
+      const tb = document.getElementById('recentBody'); tb.innerHTML = '';
+      recent.forEach(r => {
+        const badge = r.status === 'Flagged' ? '<span class="bg-danger text-white px-2 py-0.5 rounded text-xs">⚠ FLAGGED</span>' : r.status === 'Review' ? '<span class="bg-warn text-bg px-2 py-0.5 rounded text-xs">⚡ Review</span>' : '<span class="bg-ok text-bg px-2 py-0.5 rounded text-xs">✓ Normal</span>';
+        tb.innerHTML += `<tr class="hover:bg-panel/50 cursor-pointer" onclick="switchView('scan'); setScan('${r.plate}','${r.conf}',${r.status === 'Flagged'})"><td class="p-3"><img src="https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=100" class="w-12 h-8 object-cover rounded border border-border" alt=""></td><td class="p-3 font-mono font-bold">${r.plate}</td><td class="p-3">${r.conf}</td><td class="p-3 text-muted text-xs">${r.time}</td><td class="p-3">${badge}</td><td class="p-3 text-right"><i class="fa-solid fa-chevron-right text-muted text-xs"></i></td></tr>`;
+      });
+    }
+    function renderFlagged() {
+      const tb = document.getElementById('flagBody'); const q = (document.getElementById('flagSearch').value || '').toLowerCase(); const tf = document.getElementById('flagTypeFilter').value;
+      tb.innerHTML = '';
+      let visible = 0;
+      flagged.forEach((f, i) => {
+        if (q && !(f.plate.toLowerCase().includes(q) || f.reason.toLowerCase().includes(q) || f.tags.toLowerCase().includes(q))) return;
+        if (tf && f.type !== tf.toUpperCase()) return;
+        visible++;
+        const chip = f.type === 'BLOCKED' ? 'bg-danger text-white' : f.type === 'SUSPICIOUS' ? 'bg-warn text-bg' : 'bg-ok text-bg';
+        const status = f.status === 'Active' ? '<span class="bg-ok/20 text-ok px-2 py-0.5 rounded text-xs">Active</span>' : '<span class="bg-panel border border-border px-2 py-0.5 rounded text-xs">Inactive</span>';
+        tb.innerHTML += `<tr class="hover:bg-panel/30"><td class="p-3 font-mono font-bold">${f.plate}</td><td class="p-3"><span class="px-2 py-0.5 rounded text-xs font-bold ${chip}">${f.type}</span></td><td class="p-3 max-w-[360px]"><div class="text-sm leading-tight">${f.reason}</div><div class="flex gap-1 mt-1 flex-wrap">${f.tags.split(',').map(t => `<span class="text-[10px] bg-bg border border-border px-1.5 py-0.5 rounded">${t.trim()}</span>`).join('')}</div></td><td class="p-3 text-xs text-muted">${f.added}</td><td class="p-3 text-xs">${f.matched}</td><td class="p-3">${status}</td><td class="p-3"><div class="flex gap-1"><button aria-label="Edit" onclick="editFlag(${i})" class="w-7 h-7 rounded bg-panel border border-border hover:border-accent"><i class="fa-solid fa-pen text-xs"></i></button><button aria-label="Delete" onclick="askDel(${i})" class="w-7 h-7 rounded bg-panel border border-border hover:border-danger"><i class="fa-solid fa-trash text-xs"></i></button></div></td></tr>`;
+      });
+      document.getElementById('flagCountBadge').textContent = flagged.length;
+      const empty = document.getElementById('flagEmpty'); if (empty) empty.classList.toggle('hidden', visible !== 0 || flagged.length !== 0);
+      if (visible === 0 && flagged.length === 0 && tb) tb.innerHTML = '';
+      const now = new Date().toLocaleTimeString().slice(0, 5);
+      const t1 = document.getElementById('flagPersistTime'); if (t1) t1.textContent = now;
+      const t2 = document.getElementById('flagPersistTime2'); if (t2) t2.textContent = new Date().toLocaleTimeString();
+      // persistence indicator flash
+      const pill = document.getElementById('flagPersist'); if (pill) {pill.classList.remove('hidden'); pill.classList.add('opacity-100');}
+    }
+    function renderLogs() {
+      const tb = document.getElementById('logBody'); const q = (document.getElementById('logSearch').value || '').toLowerCase(); const st = document.getElementById('logStatus').value; const only = document.getElementById('onlyFlagged').checked;
+      tb.innerHTML = '';
+      logs.forEach((l, idx) => {
+        if (q && !l.plate.toLowerCase().includes(q)) return;
+        if (st && l.decision !== st) return;
+        if (only && !l.flag) return;
+        const flagIcon = l.flag ? '<span class="bg-danger text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px]">⚠</span>' : '<span class="text-muted">—</span>';
+        const typeBadge = l.type === 'BLOCKED' ? '<span class="bg-danger text-white px-1.5 py-0.5 rounded text-xs">BLOCKED</span>' : l.type === 'SUSPICIOUS' ? '<span class="bg-warn text-bg px-1.5 py-0.5 rounded text-xs">SUSPICIOUS</span>' : l.type === 'AUTHORIZED' ? '<span class="bg-ok text-bg px-1.5 py-0.5 rounded text-xs">AUTHORIZED</span>' : '—';
+        const region = l.plate.startsWith('AB') ? 'EU' : l.plate.startsWith('XY') ? 'US' : l.plate.startsWith('KL') ? 'EU' : 'UK';
+        const regionChip = region === 'EU' ? '<span class="px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 text-[10px] font-bold">EU</span>' : region === 'US' ? '<span class="px-1.5 py-0.5 rounded bg-warn/20 text-warn border border-warn/30 text-[10px] font-bold">US</span>' : '<span class="px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 text-[10px] font-bold">UK</span>';
+        const confVal = parseInt(l.conf) || 0;
+        const confColor = l.conf === '—' ? 'bg-panel' : confVal > 85 ? 'bg-ok' : confVal > 60 ? 'bg-warn' : 'bg-danger';
+        const confSpark = l.conf === '—' ? '—' : `<div class="flex items-center gap-1.5"><span class="font-mono text-xs">${l.conf}</span><div class="w-12 h-1 bg-bg rounded-full overflow-hidden border border-border hidden sm:block"><div class="h-full ${confColor}" style="width:${confVal}%"></div></div><span class="hidden md:inline text-[10px] text-muted">${confVal < 72 ? 'low B 64%' : confVal > 90 ? '✓' : 'low: 3 88%'}</span></div>`;
+        tb.innerHTML += `<tr onclick="openLog(${idx})" class="cursor-pointer hover:bg-panel/50 ${l.row}"><td class="p-3 font-mono text-xs">${l.time}</td><td class="p-3"><img src="${l.img}" class="w-10 h-6 object-cover rounded border border-border" alt=""></td><td class="p-3 font-mono font-bold">${l.plate}</td><td class="p-3">${confSpark}</td><td class="p-3">${flagIcon}</td><td class="p-3">${typeBadge}</td><td class="p-3">${regionChip}</td><td class="p-3 text-xs">${l.decision}</td><td class="p-3 text-xs text-muted">${l.op}</td></tr>`;
+      });
+    }
+    function renderAlerts() {
+      const c = document.getElementById('recentAlerts'); c.innerHTML = '';
+      logs.filter(l => l.flag).slice(0, 4).forEach(l => {
+        c.innerHTML += `<div class="flex items-center gap-2 p-2 rounded bg-bg border border-border hover:border-accent cursor-pointer" onclick="openLog(${logs.indexOf(l)})"><span class="w-6 h-6 rounded bg-danger text-white flex items-center justify-center text-xs">⚠</span><div class="text-xs"><div class="font-mono font-bold">${l.plate} • ${l.type}</div><div class="text-muted">${l.time}</div></div><i class="fa-solid fa-chevron-right ml-auto text-muted text-xs"></i></div>`;
+      });
+    }
+    function renderThumbs() {
+      const list = document.getElementById('thumbList'); const mob = document.getElementById('mobileThumbs');
+      const baseItems = [
+        {name: 'img_01.jpg', src: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400', active: true},
+        {name: 'img_02.jpg', src: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400'},
+        {name: 'img_03.jpg', src: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400'},
+        {name: 'img_flagged.jpg', src: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400'},
+      ];
+      const items = videoSource ? [
+        {name: 'video_frame_01.jpg', src: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400', isVideo: true, frameIdx: 1, active: true},
+        {name: 'video_frame_02.jpg', src: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400', isVideo: true, frameIdx: 2, active: false},
+      ] : baseItems;
+      const html = items.map(it => {
+        if (it.isVideo) {
+          return `<div onclick="setScanFromFrame('AB123CD','92%',${it.frameIdx})" class="flex items-center gap-2 p-2 rounded border ${it.active ? 'border-accent bg-accent/10' : 'border-border bg-panel hover:border-accent/50'} cursor-pointer"><img src="${it.src}" class="w-14 h-10 object-cover rounded" alt=""><div class="text-xs"><div class="font-semibold">Frame ${it.frameIdx}</div><div class="text-muted">Video still</div></div><i class="fa-solid fa-play ml-auto text-accent text-xs"></i></div>`;
+        }
+        const isFlagged = it.name.includes('flagged');
+        const plate = isFlagged ? 'AB123CD' : 'MN444OP';
+        const conf = isFlagged ? '92%' : '88%';
+        return `<div onclick="setScan('${plate}','${conf}',${isFlagged})" class="flex items-center gap-2 p-2 rounded border ${it.active ? 'border-accent bg-accent/10' : 'border-border bg-panel hover:border-accent/50'} cursor-pointer"><img src="${it.src}" class="w-14 h-10 object-cover rounded" alt=""><div class="text-xs"><div class="font-semibold">${it.name}</div><div class="text-muted">1.2MB</div></div><i class="fa-solid fa-check ml-auto text-accent ${it.active ? '' : 'hidden'}"></i></div>`;
+      }).join('');
+      if (list) list.innerHTML = html;
+      if (mob) mob.innerHTML = items.map(it => `<img src="${it.src}" class="w-20 h-14 object-cover rounded border ${it.active ? 'border-accent' : 'border-border'} shrink-0" alt="">`).join('');
+      document.getElementById('loadedCount').textContent = items.length;
+    }
+    function setScanFromFrame(plate, conf, frameIdx) {
+      const c = frameIdx === 1 ? '92%' : '88%';
+      setScan(plate, c, frameIdx % 2 === 1);
+    }
+    function setScan(plate, conf, flagged) {
+      const isFail = conf === '—' || plate === '???';
+      currentScan = {plate, conf, flagged: flagged && !isFail, type: flagged && !isFail ? 'BLOCKED' : '—', reason: flagged && !isFail ? 'Stolen vehicle – Metro PD Case #2024-045' : '—'};
+      document.getElementById('badgePlate').textContent = plate;
+      const confEl = document.getElementById('badgeConf'); if (confEl) {confEl.textContent = conf; confEl.className = isFail ? 'font-bold text-muted' : 'font-bold ' + (parseInt(conf) > 85 ? 'text-ok' : parseInt(conf) > 60 ? 'text-warn' : 'text-danger');}
+      const lowEl = document.getElementById('badgeLow'); if (lowEl) {lowEl.textContent = isFail ? 'low: —' : (parseInt(conf) > 85 ? 'low: ‘3’ 88%' : parseInt(conf) > 60 ? 'low: ‘B’ 64%' : 'low: ‘B’ 58%'); lowEl.className = isFail ? 'text-[11px] text-muted' : 'text-[11px] ' + (parseInt(conf) > 85 ? 'text-muted' : 'text-warn');}
+      const errEl = document.getElementById('badgeErr'); if (errEl) errEl.classList.toggle('hidden', !isFail);
+      const perChar = document.getElementById('badgePerChar');
+      if (perChar) {
+        if (isFail) {perChar.innerHTML = '<span class="px-1 py-0.5 rounded bg-danger/20 text-danger border border-danger/30 font-mono text-[10px]">OCR failed • no chars</span>';}
+        else {
+          const chars = plate.split(''); const confs = [98, 64, 94, 91, 88, 96, 93];
+          perChar.innerHTML = chars.map((ch, i) => {const c = confs[i] || 90; const cls = c > 85 ? 'bg-ok/20 text-ok border-ok/30' : c > 70 ? 'bg-warn/20 text-warn border-warn/30' : 'bg-danger/20 text-danger border-danger/30'; return `<span class="px-1 py-0.5 rounded ${cls} border font-mono text-[10px]">${ch} ${c}%</span>`;}).join('');
+        }
+      }
+      const region = plate.startsWith('AB') ? 'EU' : plate.startsWith('XY') ? 'US' : plate.startsWith('KL') ? 'EU' : 'UK';
+      const regionEl = document.getElementById('badgeRegion'); if (regionEl) {regionEl.textContent = region; regionEl.className = region === 'EU' ? 'ml-1 px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 text-[10px] font-bold' : region === 'US' ? 'ml-1 px-1.5 py-0.5 rounded bg-warn/20 text-warn border border-warn/30 text-[10px] font-bold' : 'ml-1 px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 text-[10px] font-bold';}
+      const validEl = document.getElementById('badgeValid'); if (validEl) {
+        const norm = plate.replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1');
+        const isValid = !isFail && /^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$/.test(norm);
+        validEl.textContent = isValid ? '✓ ' + region + ' valid' : '✗ invalid';
+        validEl.className = isValid ? 'px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 font-bold text-[11px]' : 'px-1.5 py-0.5 rounded bg-danger/20 text-danger border border-danger/30 font-bold text-[11px]';
+      }
+      const normEl = document.getElementById('badgeNorm'); if (normEl) {
+        const norm = plate.replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1');
+        normEl.textContent = isFail ? 'norm: —' : 'norm: ' + norm + ' ✓';
+      }
+      document.getElementById('matchVal').textContent = currentScan.flagged ? 'YES' : 'NO';
+      document.getElementById('matchVal').className = currentScan.flagged ? 'font-bold text-danger' : 'font-bold text-ok';
+      document.getElementById('flagTypeVal').textContent = currentScan.flagged ? 'BLOCKED' : '—';
+      document.getElementById('flagTypeVal').className = currentScan.flagged ? 'px-2 py-0.5 rounded bg-danger text-white text-xs' : 'px-2 py-0.5 rounded bg-panel border border-border text-xs';
+      document.getElementById('reasonVal').textContent = currentScan.flagged ? 'Stolen vehicle – Metro PD Case #2024-045' : '—';
+      document.getElementById('bboxNormal').classList.toggle('hidden', currentScan.flagged || isFail);
+      document.getElementById('bboxFlagged').classList.toggle('hidden', !currentScan.flagged);
+      if (isFail) {document.getElementById('bboxNormal').classList.add('hidden'); document.getElementById('flagBanner').classList.add('hidden'); const rev = document.querySelector('input[value="review"]'); if (rev) rev.checked = true;}
+      else {document.getElementById('flagBanner').classList.toggle('hidden', !currentScan.flagged); if (currentScan.flagged) showAlert(plate, 'Stolen vehicle – Metro PD Case #2024-045');}
+      // update scan mem right panel already via bump
+    }
+    function demoFlaggedScan() {switchView('scan'); setScan('AB123CD', '92%', true); bumpMem(0.06); memState.images++; toast('Demo: Flagged plate loaded', 'warn');}
+    function reScan() {bumpMem(0.07); toast('Re-scanning with OpenCV…', 'info'); setTimeout(() => {bumpMem(0.04); toast('Plate re-detected: AB123CD 91%', 'ok');}, 800);}
+    function markReview() {const r = document.querySelector('input[value="review"]'); if (r) r.checked = true; toast('Marked for manual review', 'warn');}
+    function exportScan() {toast('Exported scan_result_AB123CD.csv', 'ok');}
+    function saveDecision() {
+      const dec = document.querySelector('input[name="decision"]:checked'); const val = dec ? dec.value : 'allow';
+      const notes = document.getElementById('opNotes').value;
+      logs.unshift({time: new Date().toLocaleTimeString(), img: document.getElementById('previewImg').src, plate: currentScan.plate, conf: currentScan.conf, flag: currentScan.flagged, type: currentScan.flagged ? 'BLOCKED' : '—', decision: val === 'allow' ? 'Allow' : val === 'block' ? 'Block' : 'Review', op: 'op_1', row: currentScan.flagged ? 'bg-danger/10' : ''});
+      renderLogs(); renderRecent(); renderAlerts();
+      bumpMem(0.02);
+      toast(`Decision saved: ${val} – logged`, 'ok');
+      if (currentScan.flagged) showAlert(currentScan.plate, currentScan.reason);
+    }
+    function hideBanner() {document.getElementById('flagBanner').classList.add('hidden');}
+    function openFlagModal(idx) {
+      editIndex = typeof idx === 'number' ? idx : -1;
+      document.getElementById('flagModal').classList.remove('hidden');
+      if (editIndex >= 0) {const f = flagged[editIndex]; document.getElementById('fPlate').value = f.plate; document.getElementById('fType').value = f.type; document.getElementById('fReason').value = f.reason; document.getElementById('fTags').value = f.tags; document.getElementById('fTrigger').checked = f.trigger;}
+      else {document.getElementById('flagForm').reset(); document.getElementById('fTrigger').checked = true;}
+    }
+    function closeFlagModal() {document.getElementById('flagModal').classList.add('hidden');}
+    function editFlag(i) {openFlagModal(i);}
+    document.getElementById('flagForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const entry = {plate: document.getElementById('fPlate').value.toUpperCase(), type: document.getElementById('fType').value, reason: document.getElementById('fReason').value, tags: document.getElementById('fTags').value, added: new Date().toISOString().slice(0, 10), matched: 'Never', status: 'Active', trigger: document.getElementById('fTrigger').checked};
+      if (editIndex >= 0) flagged[editIndex] = entry; else flagged.push(entry);
+      closeFlagModal(); renderFlagged(); toast(editIndex >= 0 ? 'Flagged plate updated' : 'Flagged plate added – ' + entry.plate, 'ok');
+    });
+    function askDel(i) {delIndex = i; document.getElementById('delPlate').textContent = flagged[i].plate; document.getElementById('delModal').classList.remove('hidden');}
+    function closeDel() {document.getElementById('delModal').classList.add('hidden');}
+    function confirmDel() {flagged.splice(delIndex, 1); closeDel(); renderFlagged(); toast('Flagged plate deleted', 'warn');}
+    function openLog(idx) {
+      selectedLog = logs[idx];
+      document.getElementById('logModal').classList.remove('hidden');
+      document.getElementById('logImg').src = selectedLog.img;
+      document.getElementById('dTime').textContent = '2024-01-15 ' + selectedLog.time;
+      document.getElementById('dPlate').textContent = selectedLog.plate;
+      document.getElementById('dConf').textContent = selectedLog.conf;
+      document.getElementById('dFlag').textContent = `Match: ${selectedLog.flag ? 'YES' : 'NO'} • ${selectedLog.type}`;
+      document.getElementById('dReason').textContent = selectedLog.flag ? 'Stolen vehicle – Metro PD Case #2024-045' : 'No watchlist match';
+      document.getElementById('dHistory').innerHTML = `<div>14:32:07 → Review (op_1) "Pending verification"</div><div>14:35:12 → ${selectedLog.decision} (${selectedLog.op}) "Current"</div>`;
+      document.getElementById('dNotes').value = '';
+    }
+    function closeLogModal() {document.getElementById('logModal').classList.add('hidden');}
+    function saveNotes() {toast('Operator notes saved', 'ok'); closeLogModal();}
+    function exportLogs() {toast('Exported logs_2024-01-15.csv (127 rows)', 'ok');}
+    function testSound() {toast('🔊 Alert sound played', 'info');}
+    function toast(msg, type = 'info') {
+      const colors = {ok: 'border-ok text-ok bg-ok/10', warn: 'border-warn text-warn bg-warn/10', info: 'border-accent text-accent bg-accent/10', danger: 'border-danger text-danger bg-danger/10'};
+      const el = document.createElement('div');
+      el.className = `px-4 py-3 rounded border backdrop-blur bg-surface/90 shadow-lg flex items-center gap-2 text-sm ${colors[type] || colors.info}`;
+      el.innerHTML = `<i class="fa-solid ${type === 'ok' ? 'fa-check' : type === 'warn' ? 'fa-triangle-exclamation' : 'fa-circle-info'}"></i><span>${msg}</span><button onclick="this.parentElement.remove()" aria-label="Dismiss" class="ml-auto opacity-60 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>`;
+      const stack = document.getElementById('toastStack');
+      stack.appendChild(el);
+      if (stack.children.length > 3) stack.firstChild.remove();
+      setTimeout(() => el.remove(), 4000);
+    }
+    function showAlert(plate, reason) {
+      const el = document.createElement('div');
+      el.className = 'p-4 rounded-xl border border-danger bg-danger text-white shadow-xl flex flex-col gap-1 max-w-[360px]';
+      el.innerHTML = `<div class="font-black flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> FLAGGED PLATE DETECTED <button onclick="this.closest('div').parentElement.remove()" aria-label="Close" class="ml-auto w-7 h-7 rounded bg-white/20"><i class="fa-solid fa-xmark text-xs"></i></button></div><div class="text-sm">Plate: <span class="font-mono font-bold">${plate}</span> • Reason: ${reason}</div><div class="flex gap-2 mt-2"><button onclick="switchView('logs');this.closest('div').parentElement.remove()" class="flex-1 py-1.5 rounded bg-white text-danger text-xs font-bold">View in Logs →</button><button onclick="switchView('scan');this.closest('div').parentElement.remove()" class="flex-1 py-1.5 rounded bg-white/20 text-white text-xs font-bold">Open in Scan</button></div>`;
+      document.getElementById('toastStack').appendChild(el);
+      setTimeout(() => el.remove(), 10000);
+      const dot = document.getElementById('bellDot');
+      dot.textContent = parseInt(dot.textContent) + 1;
+      dot.classList.remove('hidden');
+    }
+    function toggleAcc(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden');
+    }
+    function toggleScanDrawer(side) {
+      const left = document.getElementById('scanLeft');
+      const right = document.getElementById('scanRight');
+      if (side === 'left') {left.classList.toggle('hidden'); left.classList.toggle('flex');}
+      if (side === 'right') {right.classList.toggle('hidden'); right.classList.toggle('flex'); right.classList.toggle('absolute'); right.classList.toggle('inset-0'); right.classList.toggle('z-30');}
+    }
+    function clearThumbs() {videoSource = null; document.getElementById('videoPlayer').classList.add('hidden'); document.getElementById('previewImg').classList.remove('hidden'); document.getElementById('videoProgress').classList.add('hidden'); document.getElementById('videoControls').classList.add('hidden'); renderThumbs(); toast('Cleared', 'info'); bumpMem(-0.12);}
+    function updateMemoryUI() {
+      const pct = Math.round((memState.used / memState.total) * 100);
+      const color = pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warn' : 'bg-ok';
+      const stroke = pct > 85 ? '#ff5555' : pct > 60 ? '#ffb86c' : '#50fa7b';
+      const gauge = document.getElementById('memGauge');
+      if (gauge) {const offset = 263.89 - (263.89 * pct / 100); gauge.style.strokeDashoffset = offset; gauge.setAttribute('stroke', stroke);}
+      ['memPct', 'headerMemPct', 'sidebarMemPct', 'settingsMemPct'].forEach(id => {const el = document.getElementById(id); if (el) el.textContent = pct + '%';});
+      ['headerMemBar', 'sidebarMemBar', 'memBar', 'rightMemBar'].forEach(id => {const el = document.getElementById(id); if (el) {el.style.width = pct + '%'; el.className = 'h-full transition-all duration-700 ' + color;} });
+      const usedEl = document.getElementById('memUsed'); if (usedEl) usedEl.textContent = memState.used.toFixed(2);
+      const totalEl = document.getElementById('memTotal'); if (totalEl) totalEl.textContent = memState.total.toFixed(2);
+      const hText = document.getElementById('headerMemText'); if (hText) hText.textContent = memState.used.toFixed(1) + 'GB';
+      const sText = document.getElementById('sidebarMemText'); if (sText) sText.textContent = memState.used.toFixed(1) + ' / ' + memState.total.toFixed(1) + ' GB';
+      const imgEl = document.getElementById('memImg'); if (imgEl) imgEl.textContent = memState.img + ' MB';
+      const vidEl = document.getElementById('memVid'); if (vidEl) vidEl.textContent = memState.vid + ' MB';
+      const imgBar = document.getElementById('memImgBar'); if (imgBar) imgBar.style.width = Math.min(100, Math.round(memState.img / 10)) + '%';
+      const vidBar = document.getElementById('memVidBar'); if (vidBar) vidBar.style.width = Math.min(100, Math.round(memState.vid / 6)) + '%';
+      const sImg = document.getElementById('sidebarMemImages'); if (sImg) sImg.textContent = memState.img + ' MB';
+      const sVid = document.getElementById('sidebarMemVideo'); if (sVid) sVid.textContent = memState.vid + ' MB';
+      const scanMem = document.getElementById('scanMem'); if (scanMem) scanMem.textContent = Math.round(memState.img / 12 + memState.vid / 8 + 280);
+      const rightTotal = document.getElementById('rightMemTotal'); if (rightTotal) rightTotal.textContent = '~' + Math.round(memState.img / 12 + memState.vid / 8 + 280) + ' MB';
+      const rightBar = document.getElementById('rightMemBar'); if (rightBar) rightBar.style.width = Math.min(100, pct - 6) + '%';
+      const rightImg = document.getElementById('rightMemImg'); if (rightImg) rightImg.textContent = (4.2 + memState.images * 0.1).toFixed(1) + ' MB (1920×1080)';
+      const rightVid = document.getElementById('rightMemVid'); if (rightVid) rightVid.textContent = memState.vid + ' MB';
+      const peakEl = document.getElementById('memPeak'); if (peakEl) peakEl.textContent = memState.peak.toFixed(2) + ' GB';
+      const sPeak = document.getElementById('settingsMemPeak'); if (sPeak) sPeak.textContent = memState.peak.toFixed(2) + ' GB';
+      const sUsed = document.getElementById('settingsMemUsed'); if (sUsed) sUsed.textContent = memState.used.toFixed(2);
+      const sPct = document.getElementById('settingsMemPct'); if (sPct) sPct.textContent = pct;
+      const sState = document.getElementById('settingsMemState'); if (sState) {sState.textContent = pct > 85 ? 'Critical' : pct > 60 ? 'Elevated' : 'Healthy'; sState.className = 'px-2 py-1 rounded border text-xs ' + (pct > 85 ? 'bg-danger/20 text-danger border-danger/30' : pct > 60 ? 'bg-warn/20 text-warn border-warn/30' : 'bg-ok/20 text-ok border-ok/30');}
+      const status = document.getElementById('memStatus'); if (status) {status.textContent = pct > 85 ? 'CRITICAL • ' + (memState.total - memState.used).toFixed(1) + 'GB left' : pct > 60 ? 'ELEVATED • ' + (memState.total - memState.used).toFixed(1) + 'GB left' : 'OK • headroom ' + (memState.total - memState.used).toFixed(1) + 'GB'; status.className = 'text-[11px] font-bold mt-1 ' + (pct > 85 ? 'text-danger' : pct > 60 ? 'text-warn' : 'text-ok');}
+      const warn = document.getElementById('memWarn'); if (warn) warn.classList.toggle('hidden', pct <= 60);
+      const danger = document.getElementById('memDanger'); if (danger) danger.classList.toggle('hidden', pct <= 85);
+      document.getElementById('memImgCount').textContent = memState.images;
+      document.getElementById('memFrameCount').textContent = memState.frames;
+      document.getElementById('memGcCount').textContent = memState.gc;
+      renderSparkline();
+    }
+    function renderSparkline() {
+      const c = document.getElementById('memSparkline'); if (!c) return;
+      c.innerHTML = '';
+      const max = Math.max(...memState.history, 60);
+      memState.history.forEach(v => {
+        const h = Math.max(4, Math.round((v / max) * 64));
+        const col = v > 85 ? 'bg-danger' : v > 60 ? 'bg-warn' : 'bg-accent';
+        const bar = document.createElement('div');
+        bar.className = `flex-1 rounded-sm ${col} transition-all`;
+        bar.style.height = h + 'px';
+        bar.title = v + '%';
+        c.appendChild(bar);
+      });
+    }
+    function bumpMem(delta) {
+      memState.used = Math.max(0.4, Math.min(memState.total * 0.98, memState.used + delta));
+      if (memState.used > memState.peak) memState.peak = memState.used;
+      const pct = Math.round((memState.used / memState.total) * 100);
+      memState.history.push(pct); if (memState.history.length > 24) memState.history.shift();
+      updateMemoryUI();
+    }
+    function simulateMemorySpike() {
+      bumpMem(0.9 + Math.random() * 0.6);
+      memState.img += 120; memState.vid += 80; memState.images += 3; memState.frames += 12;
+      toast('Simulated spike: +0.9GB (batch decode)', 'warn');
+      if ((memState.used / memState.total) > 0.85) toast('Memory critical – auto-clear triggered', 'danger');
+    }
+    function clearMemoryCache() {
+      const freed = (memState.img * 0.4 + memState.vid * 0.7);
+      bumpMem(-freed / 1024);
+      memState.img = Math.max(80, Math.round(memState.img * 0.6));
+      memState.vid = Math.max(20, Math.round(memState.vid * 0.3));
+      memState.frames = Math.max(0, memState.frames - 8);
+      memState.gc++;
+      document.getElementById('rightMemVid').textContent = '0 MB';
+      toast('Cache cleared – freed ' + Math.round(freed) + ' MB', 'ok');
+    }
+
+    // Video helpers
+    function initVideoPlayer(file) {
+      const url = URL.createObjectURL(file);
+      const video = document.getElementById('videoPlayer');
+      const previewImg = document.getElementById('previewImg');
+      video.src = url;
+      video.classList.remove('hidden');
+      previewImg.classList.add('hidden');
+      document.getElementById('videoProgress').classList.remove('hidden');
+      document.getElementById('videoControls').classList.remove('hidden');
+      memState.vid = Math.min(900, memState.vid + 140); memState.frames += 12; bumpMem(0.38);
+      video.onloadedmetadata = () => {
+        const d = video.duration;
+        const m = Math.floor(d / 60).toString().padStart(2, '0');
+        const s = Math.floor(d % 60).toString().padStart(2, '0');
+        document.getElementById('videoDuration').textContent = m + ':' + s;
+        document.getElementById('frameTotal').textContent = Math.round(d * 30).toString();
+      };
+      video.ontimeupdate = () => {
+        const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+        document.getElementById('seekBar').value = pct;
+        const cur = Math.floor(video.currentTime);
+        const m = Math.floor(cur / 60).toString().padStart(2, '0');
+        const s = Math.floor(cur % 60).toString().padStart(2, '0');
+        document.getElementById('seekTime').textContent = m + ':' + s;
+        const totalSec = Math.floor(video.currentTime);
+        const hh = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+        const mm = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+        const ss = Math.floor(totalSec % 60).toString().padStart(2, '0');
+        document.getElementById('frameTime').textContent = hh + ':' + mm + ':' + ss;
+        document.getElementById('frameTimeMini').textContent = hh + ':' + mm + ':' + ss;
+        document.getElementById('frameNum').textContent = Math.round(video.currentTime * 30).toString().padStart(4, '0');
+      };
+      videoSource = {file, videoElement: video};
+      renderThumbs();
+    }
+    function extractCurrentFrame(videoEl) {
+      try {
+        const c = document.createElement('canvas'); c.width = videoEl.videoWidth || 640; c.height = videoEl.videoHeight || 360;
+        const ctx = c.getContext('2d'); ctx.drawImage(videoEl, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.8);
+      } catch (e) {return 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400';}
+    }
+    function processCurrentFrame() {
+      const video = document.getElementById('videoPlayer');
+      if (!video || video.classList.contains('hidden')) {toast('Load a video first', 'warn'); return;}
+      if (video.paused) video.play();
+      const fd = extractCurrentFrame(video);
+      bumpMem(0.08); memState.frames++;
+      toast('Processing current frame…', 'info');
+      setTimeout(() => {
+        const plates = ['AB123CD', 'XY987ZT', 'KL555MN']; const p = plates[Math.floor(Math.random() * plates.length)];
+        const conf = (70 + Math.random() * 25).toFixed(0);
+        setScan(p, conf + '%', Math.random() > 0.5);
+        toast('Plate detected: ' + p + ' ' + conf + '%', 'ok');
+      }, 800);
+    }
+    function processAllFramesToggle() {
+      processAllFrames = !processAllFrames;
+      document.getElementById('frameIntervalVal').textContent = processAllFrames ? 'All' : '1';
+      toast(processAllFrames ? 'Will process entire video' : 'Will process keyframes only', 'info');
+    }
+    let batchTimer = null, batchIdx = 0;
+    function startBatchDemo() {
+      const batchEl = document.getElementById('batchProgress');
+      const statusEl = document.getElementById('batchStatus');
+      if (batchEl) batchEl.classList.remove('hidden');
+      if (statusEl) statusEl.classList.remove('hidden');
+      batchIdx = 0;
+      bumpMem(0.45); memState.images += 6;
+      if (batchTimer) clearInterval(batchTimer);
+      batchTimer = setInterval(() => {
+        batchIdx++;
+        const pct = Math.min(100, Math.round((batchIdx / 10) * 100));
+        const bar = document.getElementById('batchBar'); if (bar) bar.style.width = pct + '%';
+        const statusBar = document.getElementById('batchStatusBar'); if (statusBar) statusBar.style.width = pct + '%';
+        const pctEl = document.getElementById('batchPct'); if (pctEl) pctEl.textContent = pct + '%';
+        const cur = document.getElementById('batchCurrent'); if (cur) cur.textContent = 'traffic_' + String(batchIdx).padStart(2, '0') + '.jpg';
+        bumpMem(0.03);
+        if (batchIdx >= 10) {clearInterval(batchTimer); batchTimer = null; toast('Batch complete: 10/10 images processed (QtConcurrent)', 'ok'); setTimeout(() => {document.getElementById('batchProgress')?.classList.add('hidden'); document.getElementById('batchStatus')?.classList.add('hidden'); bumpMem(-0.2);}, 1800);}
+      }, 380);
+      toast('Batch started: 10 images • 2 threads', 'info');
+    }
+    function cancelBatch() {
+      if (batchTimer) {clearInterval(batchTimer); batchTimer = null;}
+      document.getElementById('batchProgress')?.classList.add('hidden');
+      document.getElementById('batchStatus')?.classList.add('hidden');
+      bumpMem(-0.15);
+      toast('Batch cancelled', 'warn');
+    }
+    function simulateOcrFail() {
+      document.getElementById('badgePlate').textContent = '???';
+      document.getElementById('badgeConf').textContent = '—';
+      document.getElementById('badgeConf').className = 'font-bold text-muted';
+      document.getElementById('badgeLow').textContent = 'low: —';
+      document.getElementById('badgeLow').className = 'text-[11px] text-danger';
+      document.getElementById('badgePerChar').innerHTML = '<span class="px-1 py-0.5 rounded bg-danger/20 text-danger border border-danger/30 font-mono text-[10px]">OCR failed • no chars</span>';
+      document.getElementById('badgeValid').textContent = '✗ invalid';
+      document.getElementById('badgeValid').className = 'px-1.5 py-0.5 rounded bg-danger/20 text-danger border border-danger/30 font-bold text-[11px]';
+      document.getElementById('badgeErr').classList.remove('hidden');
+      document.getElementById('bboxNormal').classList.add('hidden');
+      document.getElementById('bboxFlagged').classList.add('hidden');
+      const rev = document.querySelector('input[value="review"]'); if (rev) rev.checked = true;
+      document.getElementById('matchVal').textContent = 'NO';
+      document.getElementById('flagTypeVal').textContent = '—';
+      toast('OCR failed – confidence 38% below 0.72 threshold → forced Review', 'warn');
+    }
+    function simulateCorrupt() {
+      toast('Failed to load image: traffic_corrupt.jpg (libjpeg: bogus marker)', 'danger');
+      const dz = document.getElementById('dropZone');
+      if (dz) {dz.classList.add('border-danger'); dz.querySelector('.text-lg').innerHTML = '⚠ Corrupt file — not an image <span class="text-muted font-normal">or</span> <span class="text-accent underline">try another</span>'; setTimeout(() => {dz.classList.remove('border-danger'); dz.querySelector('.text-lg').innerHTML = 'Drag &amp; drop vehicle media here <span class="text-muted font-normal">or</span> <span class="text-accent underline">click to browse</span>';}, 2600);}
+      bumpMem(0.02);
+    }
+    function exportFlaggedJson() {
+      const json = JSON.stringify(flagged, null, 2);
+      const blob = new Blob([json], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'flagged.json'; a.click(); URL.revokeObjectURL(url);
+      toast('Exported flagged.json (' + flagged.length + ' entries) + flagged_plates table', 'ok');
+    }
+
+    // file handling
+    const dz = document.getElementById('dropZone'), fi = document.getElementById('fileInput'), mini = document.getElementById('scanDropMini');
+    function handleFiles(files) {
+      if (!files.length) return;
+      // batch if >1
+      if (files.length > 1) {switchView('scan'); renderThumbs(); startBatchDemo(); toast(`Batch: ${files.length} images queued`, 'info'); return;}
+      const isVideo = files[0].type.startsWith('video/');
+      switchView('scan');
+      if (isVideo) {initVideoPlayer(files[0]); toast(`Loaded video: ${files[0].name}`, 'ok');}
+      else {
+        document.getElementById('videoPlayer').classList.add('hidden');
+        document.getElementById('previewImg').classList.remove('hidden');
+        document.getElementById('videoProgress').classList.add('hidden');
+        document.getElementById('videoControls').classList.add('hidden');
+        videoSource = null;
+        memState.img = Math.min(1200, memState.img + 32 * files.length); memState.images += files.length; bumpMem(0.14 * files.length);
+        setScan('AB123CD', '88%', false);
+        toast(`Loaded ${files.length} image(s)`, 'ok');
+      }
+      renderThumbs();
+    }
+    if (dz) {dz.addEventListener('click', () => fi.click()); dz.addEventListener('dragover', e => {e.preventDefault(); dz.classList.add('border-accent', 'bg-panel')}); dz.addEventListener('dragleave', () => dz.classList.remove('border-accent', 'bg-panel')); dz.addEventListener('drop', e => {e.preventDefault(); handleFiles(e.dataTransfer.files)});}
+    if (fi) fi.addEventListener('change', e => handleFiles(e.target.files));
+    if (mini) mini.addEventListener('click', () => fi.click());
+    document.getElementById('seekBar')?.addEventListener('input', e => {const v = document.getElementById('videoPlayer'); if (v && v.duration) v.currentTime = (e.target.value / 100) * v.duration;});
+    document.getElementById('flagSearch').addEventListener('input', renderFlagged);
+    document.getElementById('flagTypeFilter').addEventListener('change', renderFlagged);
+    document.getElementById('logSearch').addEventListener('input', renderLogs);
+    document.getElementById('logStatus').addEventListener('change', renderLogs);
+    document.getElementById('onlyFlagged').addEventListener('change', renderLogs);
+    document.getElementById('confRange').addEventListener('input', e => document.getElementById('confVal').textContent = parseFloat(e.target.value).toFixed(2));
+    document.getElementById('alertBell').addEventListener('click', () => {switchView('logs'); document.getElementById('onlyFlagged').checked = true; renderLogs();});
+    document.getElementById('fPlate')?.addEventListener('input', e => {
+      e.target.value = e.target.value.toUpperCase();
+      const raw = e.target.value;
+      // normalize: O->0, I->1, 5<->S, trim, remove non-alphanum except dash
+      let norm = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I/g, '1');
+      const normEl = document.getElementById('flagNormText'); if (normEl) normEl.textContent = norm || '—';
+      const region = document.querySelector('#accMemory select')?.value || 'EU (generic)';
+      const regChip = document.getElementById('flagRegionChip'); if (regChip) regChip.textContent = region.split(' ')[0];
+      const validChip = document.getElementById('flagValidChip');
+      const isValid = /^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$/.test(norm);
+      if (validChip) {validChip.textContent = isValid ? '✓ valid' : '✗ invalid'; validChip.className = isValid ? 'px-1.5 py-0.5 rounded bg-ok/20 text-ok border border-ok/30 text-[10px]' : 'px-1.5 py-0.5 rounded bg-danger/20 text-danger border border-danger/30 text-[10px]';}
+    });
+    document.addEventListener('keydown', e => {
+      const v = document.getElementById('videoPlayer');
+      if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && v && !v.classList.contains('hidden')) {
+        e.preventDefault(); v.paused ? v.play() : v.pause();
+      }
+      if (e.code === 'ArrowRight' && v && !v.classList.contains('hidden')) {v.currentTime = Math.min(v.currentTime + 5, v.duration);}
+      if (e.code === 'ArrowLeft' && v && !v.classList.contains('hidden')) {v.currentTime = Math.max(v.currentTime - 5, 0);}
+      if (e.code === 'KeyR' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {if (!document.getElementById('view-scan').classList.contains('hidden')) reScan();}
+      if (e.code === 'Escape') {closeFlagModal(); closeLogModal(); closeDel();}
+    });
+
+    // init
+    renderRecent(); renderFlagged(); renderLogs(); renderAlerts(); renderThumbs(); updateMemoryUI();
+    // live memory drift (simulates OpenCV alloc/free)
+    setInterval(() => {const drift = (Math.random() - 0.5) * 0.04; bumpMem(drift);}, 3200);
+    document.getElementById('memLimitRange')?.addEventListener('input', e => {
+      memState.limit = parseFloat(e.target.value);
+      document.getElementById('memLimitVal').textContent = memState.limit.toFixed(2) + ' GB';
+      memState.total = memState.limit + 0.8;
+      const totalEl = document.getElementById('memTotal'); if (totalEl) totalEl.textContent = memState.total.toFixed(2);
+      updateMemoryUI();
+    });
+    // localStorage persistence for threshold
+    try {
+      const saved = localStorage.getItem('argusConf');
+      if (saved) {document.getElementById('confRange').value = saved; document.getElementById('confVal').textContent = parseFloat(saved).toFixed(2);}
+      document.getElementById('confRange').addEventListener('change', e => localStorage.setItem('argusConf', e.target.value));
+    } catch (e) { }
+  </script>
+</body>
+
+</html>
