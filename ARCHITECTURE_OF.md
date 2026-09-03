@@ -7,8 +7,7 @@
   <img src="https://img.shields.io/badge/CMake-3.16-064F8C?style=for-the-badge&logo=cmake&logoColor=white" />
 </p>
 
-<p align="center">
-  ofApp + ofxImGui — docked panes replace QStackedWidget · Vision pipeline unchanged · UI adapted from of_mockup.html
+
 </p>
 
 > **Not for production** — educational, offline-first, no face/person tracking. Mockup first to lock layout & flows before C++ backend · ofApp single window, no page router.
