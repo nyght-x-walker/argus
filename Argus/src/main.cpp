@@ -1,13 +1,16 @@
+//========================================================================
+// Argus – License Plate Recognition & Flagging System
+// OF Project Generator created project
+//========================================================================
+
 #include "ofMain.h"
 #include "ofApp.h"
 
 //========================================================================
 int main( ){
-
-	//Use ofGLFWWindowSettings for more options like multi-monitor fullscreen
 	ofGLWindowSettings settings;
-	settings.setSize(1024, 768);
-	settings.windowMode = OF_WINDOW; //can also be OF_FULLSCREEN
+	settings.setSize(1280, 720);
+	settings.windowMode = OF_WINDOW;
 
 	auto window = ofCreateWindow(settings);
 
