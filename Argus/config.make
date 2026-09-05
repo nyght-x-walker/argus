@@ -143,3 +143,12 @@ OF_ROOT = /home/nyght/src/openFrameworks
 
 # vscode template
 
+################################################################################
+# OPENCV FOR DIRECT OpenCV USE (ofxOpenCv WRAPPER EXCLUDED, SEE README)
+#   Resolves system OpenCV through pkg-config on Linux (opencv5) and macOS
+#   Homebrew (opencv4). Expands to empty when neither is found, in which case
+#   the OF project generator setup is expected to provide OpenCV instead.
+################################################################################
+PROJECT_CFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --cflags opencv4 2>/dev/null || pkg-config --cflags opencv5 2>/dev/null)
+PROJECT_LDFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --libs opencv4 2>/dev/null || pkg-config --libs opencv5 2>/dev/null)
+

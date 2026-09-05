@@ -1,5 +1,5 @@
 // Argus license plate recognition and flagging system.
-// Phase 2: image loading, center viewport and basic docked panels.
+// Image loading, center viewport and basic docked panels.
 #include "ofApp.h"
 
 #include <cstring>
@@ -54,7 +54,7 @@ void ofApp::logConsole(const std::string& message, const std::string& level)
     }
 }
 
-bool ofApp::runPhase2Tests()
+bool ofApp::runStartupChecks()
 {
     std::string reason;
     if (confidenceThreshold < MIN_CONFIDENCE || confidenceThreshold > MAX_CONFIDENCE)
@@ -73,12 +73,12 @@ bool ofApp::runPhase2Tests()
     // Mirror the verdict to stdout so headless runs can check it.
     if (!reason.empty())
     {
-        logConsole("Phase 2 tests: FAILED, " + reason, "ERROR");
-        ofLogNotice("Phase2") << "Phase 2 tests: FAILED, " << reason;
+        logConsole("Startup checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Startup") << "Startup checks: FAILED, " << reason;
         return false;
     }
-    logConsole("Phase 2 tests: OK", "INFO");
-    ofLogNotice("Phase2") << "Phase 2 tests: OK";
+    logConsole("Startup checks: OK", "INFO");
+    ofLogNotice("Startup") << "Startup checks: OK";
     return true;
 }
 
@@ -97,7 +97,7 @@ void ofApp::setup()
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     logConsole("Argus OF v0.1.0, student project", "INFO");
-    logConsole("Status: Phase 2, image load and draw", "INFO");
+    logConsole("Status: image load and draw", "INFO");
 
     if (!img.load(SAMPLE_IMAGE_PATH))
     {
@@ -110,12 +110,74 @@ void ofApp::setup()
                    "INFO");
     }
 
-    runPhase2Tests();
+    runStartupChecks();
+
+    logConsole("PlateDetector initialized", "INFO");
+    runDetectorChecks();
+}
+
+void ofApp::runDetection()
+{
+    if (!img.isAllocated())
+    {
+        logConsole("PlateDetector: no image loaded", "ERROR");
+        ofLogNotice("PlateDetector") << "no image loaded";
+        return;
+    }
+
+    logConsole("[PlateDetector] Running detection on img_01.jpg", "INFO");
+    try
+    {
+        candidates = detector.detect(img);
+    }
+    catch (const std::exception& error)
+    {
+        candidates.clear();
+        logConsole(std::string("PlateDetector failed: ") + error.what(), "ERROR");
+        ofLogNotice("PlateDetector") << "failed: " << error.what();
+        return;
+    }
+
+    bDetectorRan = true;
+    std::string summary = "Found " + ofToString(candidates.size()) + " candidate(s)";
+    logConsole("[PlateDetector] " + summary, candidates.empty() ? "WARNING" : "INFO");
+    ofLogNotice("PlateDetector") << summary;
+}
+
+bool ofApp::runDetectorChecks()
+{
+    std::string reason;
+    ofImage emptyImage;
+    if (!detector.detect(emptyImage).empty())
+    {
+        reason = "unallocated image returned candidates";
+    }
+    else
+    {
+        ofImage tinyImage;
+        tinyImage.allocate(1, 1, OF_IMAGE_COLOR);
+        detector.detect(tinyImage);
+        if (img.isAllocated() && detector.detect(img).empty())
+        {
+            reason = "no candidates on the sample image";
+        }
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Detector checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Detector") << "Detector checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Detector checks: OK", "INFO");
+    ofLogNotice("Detector") << "Detector checks: OK";
+    return true;
 }
 
 void ofApp::update()
 {
-    // Pipeline detection and OCR land in later phases.
+    // Reserved hook for detection and OCR work.
     (void)pipelineRunning;
 }
 
@@ -189,8 +251,7 @@ void ofApp::drawMenuBar()
 
 void ofApp::handleRunAction()
 {
-    logConsole("[update] ImageSource load img_01.jpg", "INFO");
-    logConsole("[draw] pipeline stub complete", "INFO");
+    runDetection();
 }
 
 void ofApp::drawPipelinePanel()
@@ -205,7 +266,16 @@ void ofApp::drawPipelinePanel()
                        "draws in draw(). No page router.");
     ImGui::Separator();
     ImGui::BulletText("ImageSource");
-    ImGui::BulletText("PlateDetector");
+    if (bDetectorRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("PlateDetector -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("PlateDetector");
+    }
     ImGui::BulletText("PlateOCR");
     ImGui::BulletText("PlateValidator");
     ImGui::BulletText("FlagStore");
@@ -258,6 +328,8 @@ void ofApp::drawViewportToolbar()
     {
         logConsole("Corrupt image rejected, stub", "ERROR");
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Show candidates", &showCandidates);
     ImGui::SameLine();
     ImGui::Text("f0001 · 00:00:00");
     ImGui::Text("mat 11.8 MB · 342 MB");
@@ -342,13 +414,14 @@ void ofApp::drawInspectorPanel()
     ImGui::Begin(INSPECTOR_WINDOW_TITLE, &showInspector);
     if (ImGui::CollapsingHeader("Match Info", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Text("Watchlist: NO");
+        ImGui::Text("Watchlist: -");
         ImGui::Text("Flag type: -");
         ImGui::Text("Reason: -");
+        ImGui::Text("Detection candidates: %d", static_cast<int>(candidates.size()));
     }
     if (ImGui::CollapsingHeader("OCR, per-char", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::TextWrapped("OCR not implemented yet, Phase 4.");
+        ImGui::TextWrapped("OCR not implemented yet.");
         ImGui::Text("Mean: -");
     }
     if (ImGui::CollapsingHeader("Decision and notes", ImGuiTreeNodeFlags_DefaultOpen))
@@ -422,17 +495,17 @@ void ofApp::drawConsolePanel()
         }
         if (ImGui::BeginTabItem("Flagged"))
         {
-            ImGui::Text("Not implemented yet, future phase.");
+            ImGui::Text("Not implemented yet.");
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Logs and Alerts"))
         {
-            ImGui::Text("Not implemented yet, future phase.");
+            ImGui::Text("Not implemented yet.");
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memory"))
         {
-            ImGui::Text("Not implemented yet, future phase.");
+            ImGui::Text("Not implemented yet.");
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -456,6 +529,37 @@ void ofApp::drawViewportImage()
     ofNoFill();
     ofSetColor(255, 255, 255, 90);
     ofDrawRectangle(viewportImageRect);
+    ofPopStyle();
+
+    if (showCandidates)
+    {
+        drawCandidateOverlays();
+    }
+}
+
+void ofApp::drawCandidateOverlays()
+{
+    if (candidates.empty() || !img.isAllocated())
+    {
+        return;
+    }
+
+    float scaleX = viewportImageRect.width / static_cast<float>(img.getWidth());
+    float scaleY = viewportImageRect.height / static_cast<float>(img.getHeight());
+    ofPushStyle();
+    ofNoFill();
+    for (const auto& candidate : candidates)
+    {
+        float boxX = viewportImageRect.x + candidate.rect.x * scaleX;
+        float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
+        float boxW = candidate.rect.width * scaleX;
+        float boxH = candidate.rect.height * scaleY;
+        ofSetColor(126, 202, 156);
+        ofDrawRectangle(boxX, boxY, boxW, boxH);
+        ofSetColor(255, 255, 255);
+        int percent = static_cast<int>(candidate.confidence * 100.0f);
+        ofDrawBitmapString(ofToString(percent) + "%", boxX, boxY - 6.0f);
+    }
     ofPopStyle();
 }
 
