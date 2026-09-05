@@ -1,0 +1,16 @@
+# Argus formatting rules, matching CODE_STYLE.md section 6.3.
+# Run before committing: clang-format --dry-run --Werror on touched files.
+# SortIncludes stays off so addon header order is never reordered.
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++17
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: None
+AccessModifierOffset: -4
+ColumnLimit: 100
+PointerAlignment: Left
+ReferenceAlignment: Left
+SortIncludes: Never
