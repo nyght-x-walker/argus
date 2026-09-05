@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Phase 2 smoke test: sample image, launch stability, self-check verdict.
-# Run from anywhere: ./tests/smoke_phase2.sh (resolves to Argus/ itself).
+# Argus smoke test: sample image, launch stability, self-check verdicts.
+# Run from anywhere: ./tests/smoke.sh (resolves to Argus/ itself).
 # Needs only bash and the built binary. No test framework.
 set -u
 
@@ -22,7 +22,7 @@ run_bounded() {
         timeout "$1" "${@:2}"
         return $?
     fi
-    "${@:2}" > smoke_phase2.log 2>&1 &
+    "${@:2}" > smoke.log 2>&1 &
     RUN_PID=$!
     sleep "$1"
     if kill -0 "$RUN_PID" 2>/dev/null; then
@@ -39,16 +39,18 @@ check "sample image present" \
 check "app binary present" \
     '[ -x bin/Argus ]'
 
-run_bounded 8 ./bin/Argus > smoke_phase2.log 2>&1
+run_bounded 8 ./bin/Argus > smoke.log 2>&1
 RUN_STATUS=$?
 check "app stays open (no instant crash)" \
     "[ $RUN_STATUS -eq 124 ]"
-check "self-check verdict OK" \
-    'grep -q "Phase 2 tests: OK" smoke_phase2.log'
-rm -f smoke_phase2.log
+check "startup self-check verdict OK" \
+    'grep -q "Startup checks: OK" smoke.log'
+check "detector self-check verdict OK" \
+    'grep -q "Detector checks: OK" smoke.log'
+rm -f smoke.log
 
 if [ "$FAILURES" -ne 0 ]; then
     echo "$FAILURES check(s) failed."
     exit 1
 fi
-echo "All Phase 2 smoke checks passed."
+echo "All smoke checks passed."

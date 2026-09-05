@@ -1,7 +1,8 @@
 // Argus license plate recognition and flagging system.
-// Phase 2: image loading, center viewport and basic docked panels.
+// Image loading, center viewport and basic docked panels.
 #pragma once
 
+#include "PlateDetector.h"
 #include "ofMain.h"
 #include "ofxImGui.h"
 
@@ -9,7 +10,7 @@
 #include <string>
 #include <vector>
 
-/// ofApp hosts the single-window UI and the Phase 2 viewport state.
+/// ofApp hosts the single-window UI and the viewport state.
 class ofApp : public ofBaseApp
 {
 public:
@@ -41,7 +42,7 @@ public:
     /// Confidence threshold shared with the pipeline panel slider.
     float confidenceThreshold = 0.72f;
 
-    /// Pipeline running flag reserved for later phases.
+    /// Pipeline running flag reserved for later work.
     bool pipelineRunning = false;
 
     /// Upper bound for the in-memory console log.
@@ -56,8 +57,26 @@ public:
     /// Appends a timestamped line and trims the log to its bound.
     void logConsole(const std::string& message, const std::string& level = "INFO");
 
-    /// Runs the Phase 2 startup self checks and reports to the console.
-    bool runPhase2Tests();
+    /// Runs the startup self checks and reports to the console.
+    bool runStartupChecks();
+
+    /// Heuristic plate detector over the loaded image.
+    argus::PlateDetector detector;
+
+    /// Latest detection candidates in image coordinates.
+    std::vector<argus::PlateCandidate> candidates;
+
+    /// Toggles the candidate bounding box overlay.
+    bool showCandidates = true;
+
+    /// True once a detection run completed this session.
+    bool bDetectorRan = false;
+
+    /// Runs detection on the loaded image and logs the outcome.
+    void runDetection();
+
+    /// Verifies detector behavior on sample and edge inputs.
+    bool runDetectorChecks();
 
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
@@ -107,6 +126,9 @@ private:
 
     /// Draws the loaded image into the captured viewport rect.
     void drawViewportImage();
+
+    /// Draws candidate boxes mapped from image to viewport coordinates.
+    void drawCandidateOverlays();
 
     /// Shared stub behind the Run button and the R key.
     void handleRunAction();
