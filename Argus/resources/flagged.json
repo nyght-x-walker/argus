@@ -1,0 +1,26 @@
+[
+  {
+    "plate": "AB123CD",
+    "type": "Blocked",
+    "reason": "Stolen - Metro PD #2024-045",
+    "tags": "stolen,investigation",
+    "addedDate": "2024-01-10",
+    "triggerAlert": true
+  },
+  {
+    "plate": "XY987ZT",
+    "type": "Suspicious",
+    "reason": "Restricted zone 3x",
+    "tags": "surveillance",
+    "addedDate": "2024-01-12",
+    "triggerAlert": true
+  },
+  {
+    "plate": "KL555MN",
+    "type": "Authorized",
+    "reason": "Staff parking A",
+    "tags": "staff",
+    "addedDate": "2023-11-01",
+    "triggerAlert": false
+  }
+]

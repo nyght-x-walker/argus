@@ -2,6 +2,7 @@
 // Image loading, center viewport and basic docked panels.
 #pragma once
 
+#include "FlagStore.h"
 #include "PlateDetector.h"
 #include "PlateOCR.h"
 #include "PlateValidator.h"
@@ -9,6 +10,7 @@
 #include "ofxImGui.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -128,6 +130,24 @@ public:
     /// Verifies normalizer behavior on fixed cases.
     bool runValidatorChecks();
 
+    /// Plate watchlist loaded from the seed JSON file.
+    argus::FlagStore flagStore;
+
+    /// Watchlist hit for the latest normalized text, if any.
+    std::optional<argus::FlagEntry> currentMatch;
+
+    /// Watchlist path resolved through the OF data folder.
+    std::string flaggedJsonPath = "resources/flagged.json";
+
+    /// True once a watchlist lookup completed this session.
+    bool bFlagRan = false;
+
+    /// Looks up the normalized text and logs the outcome.
+    void lookupFlag();
+
+    /// Verifies store load and lookup behavior on fixed cases.
+    bool runFlagChecks();
+
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
 
@@ -173,6 +193,9 @@ private:
 
     /// Draws the scrolling console lines with per-level colors.
     void drawConsoleTab();
+
+    /// Draws the watchlist table inside the Flagged tab.
+    void drawFlaggedTab();
 
     /// Draws the loaded image into the captured viewport rect.
     void drawViewportImage();
