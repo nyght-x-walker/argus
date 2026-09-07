@@ -152,3 +152,11 @@ OF_ROOT = /home/nyght/src/openFrameworks
 PROJECT_CFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --cflags opencv4 2>/dev/null || pkg-config --cflags opencv5 2>/dev/null)
 PROJECT_LDFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --libs opencv4 2>/dev/null || pkg-config --libs opencv5 2>/dev/null)
 
+################################################################################
+# TESSERACT FOR PlateOCR
+#   Resolved through pkg-config on Linux (tesseract, lept) and macOS Homebrew
+#   (brew install tesseract). Expands to empty when neither is found.
+################################################################################
+PROJECT_CFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --cflags tesseract lept 2>/dev/null)
+PROJECT_LDFLAGS += $(shell export PKG_CONFIG_PATH="/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$$PKG_CONFIG_PATH"; pkg-config --libs tesseract lept 2>/dev/null)
+

@@ -3,6 +3,8 @@
 #pragma once
 
 #include "PlateDetector.h"
+#include "PlateOCR.h"
+#include "PlateValidator.h"
 #include "ofMain.h"
 #include "ofxImGui.h"
 
@@ -78,6 +80,54 @@ public:
     /// Verifies detector behavior on sample and edge inputs.
     bool runDetectorChecks();
 
+    /// Tesseract reader over the cropped best candidate.
+    argus::PlateOCR ocr;
+
+    /// Latest OCR result for the best candidate.
+    argus::OcrResult lastOcrResult;
+
+    /// Largest candidate selected for reading.
+    argus::PlateCandidate bestCandidate;
+
+    /// True once a best candidate was selected this session.
+    bool bHasBest = false;
+
+    /// True once an OCR pass completed this session.
+    bool bOcrRan = false;
+
+    /// Cropped best candidate kept for reading and debugging.
+    ofImage plateRoiImg;
+
+    /// Selects the best candidate, crops it and reads the text.
+    void recognizeBestCandidate();
+
+    /// Verifies reader behavior on probe and ROI inputs.
+    bool runOcrChecks();
+
+    /// Cleans OCR text and checks the EU generic shape.
+    argus::PlateValidator validator;
+
+    /// Raw OCR text feeding normalization.
+    std::string rawPlateText;
+
+    /// Normalized text shown in overlays and the inspector.
+    std::string normalizedPlateText;
+
+    /// EU shape verdict for the normalized text.
+    bool plateValid = false;
+
+    /// Region detected by the shape check.
+    argus::Region detectedRegion = argus::Region::Unknown;
+
+    /// True once a validation pass completed this session.
+    bool bValidatorRan = false;
+
+    /// Normalizes, validates and logs the latest OCR text.
+    void validatePlateText();
+
+    /// Verifies normalizer behavior on fixed cases.
+    bool runValidatorChecks();
+
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
 
@@ -129,6 +179,9 @@ private:
 
     /// Draws candidate boxes mapped from image to viewport coordinates.
     void drawCandidateOverlays();
+
+    /// Draws per-character confidence chips in the inspector.
+    void drawOcrChips();
 
     /// Shared stub behind the Run button and the R key.
     void handleRunAction();

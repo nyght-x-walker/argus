@@ -2,6 +2,7 @@
 // Image loading, center viewport and basic docked panels.
 #include "ofApp.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include "imgui_internal.h"
@@ -26,6 +27,28 @@ constexpr float MENU_FPS_MIN_X = 200.0f;
 // Height of the operator notes input and console autoscroll margin.
 constexpr float NOTES_INPUT_HEIGHT = 60.0f;
 constexpr float CONSOLE_AUTOSCROLL_MARGIN = 20.0f;
+
+// Low OCR mean threshold on the 0-100 Tesseract scale.
+constexpr float LOW_OCR_CONFIDENCE = 50.0f;
+
+// Maps a region verdict to its log label.
+std::string regionName(argus::Region region)
+{
+    switch (region)
+    {
+    case argus::Region::EU:
+        return "EU";
+    case argus::Region::US:
+        return "US";
+    case argus::Region::UK:
+        return "UK";
+    default:
+        return "Unknown";
+    }
+}
+
+// Pixel size of the synthetic probe image used by the OCR checks.
+constexpr int OCR_PROBE_SIZE = 10;
 
 // First-run dock proportions: left, right and bottom panels.
 constexpr float DOCK_LEFT_RATIO = 0.20f;
@@ -114,6 +137,19 @@ void ofApp::setup()
 
     logConsole("PlateDetector initialized", "INFO");
     runDetectorChecks();
+
+    if (ocr.isReady())
+    {
+        logConsole("PlateOCR initialized (eng, LSTM)", "INFO");
+    }
+    else
+    {
+        logConsole("PlateOCR engine unavailable", "ERROR");
+    }
+    runOcrChecks();
+
+    logConsole("PlateValidator initialized", "INFO");
+    runValidatorChecks();
 }
 
 void ofApp::runDetection()
@@ -139,9 +175,146 @@ void ofApp::runDetection()
     }
 
     bDetectorRan = true;
+    recognizeBestCandidate();
+
     std::string summary = "Found " + ofToString(candidates.size()) + " candidate(s)";
     logConsole("[PlateDetector] " + summary, candidates.empty() ? "WARNING" : "INFO");
     ofLogNotice("PlateDetector") << summary;
+}
+
+void ofApp::recognizeBestCandidate()
+{
+    bHasBest = false;
+    if (candidates.empty() || !img.isAllocated())
+    {
+        return;
+    }
+    // Candidates arrive largest first, so the front box is the best.
+    bestCandidate = candidates.front();
+    bHasBest = true;
+
+    float imageWidth = static_cast<float>(img.getWidth());
+    float imageHeight = static_cast<float>(img.getHeight());
+    float roiX = ofClamp(bestCandidate.rect.x, 0.0f, imageWidth - 1.0f);
+    float roiY = ofClamp(bestCandidate.rect.y, 0.0f, imageHeight - 1.0f);
+    float roiW = ofClamp(bestCandidate.rect.width, 1.0f, imageWidth - roiX);
+    float roiH = ofClamp(bestCandidate.rect.height, 1.0f, imageHeight - roiY);
+    plateRoiImg.cropFrom(img, roiX, roiY, roiW, roiH);
+
+    lastOcrResult = ocr.recognize(plateRoiImg);
+    bOcrRan = true;
+    if (lastOcrResult.text.empty())
+    {
+        logConsole("[PlateOCR] empty result", "WARNING");
+        ofLogNotice("PlateOCR") << "empty result";
+    }
+    else
+    {
+        std::string reading = "Recognized: '" + lastOcrResult.text + "' mean " +
+                              ofToString(lastOcrResult.meanConf, 1);
+        std::string level = lastOcrResult.meanConf < LOW_OCR_CONFIDENCE ? "WARNING" : "INFO";
+        logConsole("[PlateOCR] " + reading, level);
+        ofLogNotice("PlateOCR") << reading;
+    }
+    validatePlateText();
+}
+
+void ofApp::validatePlateText()
+{
+    rawPlateText = lastOcrResult.text;
+    normalizedPlateText = validator.normalize(rawPlateText);
+    plateValid = validator.isValid(normalizedPlateText, detectedRegion);
+    bValidatorRan = true;
+    if (normalizedPlateText.empty())
+    {
+        logConsole("[PlateValidator] normalization empty", "ERROR");
+        ofLogNotice("PlateValidator") << "normalization empty";
+        return;
+    }
+    logConsole("[PlateValidator] Raw: '" + rawPlateText + "' -> Normalized: '" +
+                   normalizedPlateText + "'",
+               "INFO");
+    std::string verdict = std::string("Valid: ") + (plateValid ? "yes" : "no") +
+                          " Region: " + regionName(detectedRegion);
+    std::string level = "INFO";
+    if (!plateValid && lastOcrResult.meanConf >= LOW_OCR_CONFIDENCE)
+    {
+        level = "WARNING";
+    }
+    logConsole("[PlateValidator] " + verdict, level);
+    ofLogNotice("PlateValidator") << verdict;
+}
+
+bool ofApp::runValidatorChecks()
+{
+    std::string reason;
+    bool normalizeOk = validator.normalize("ab123cd") == "AB123CD" &&
+                       validator.normalize("aB0O1I") == "AB0011" &&
+                       validator.normalize("!!!").empty();
+    auto checkValid = [&](const std::string& text, bool want, argus::Region wantRegion)
+    {
+        argus::Region region = argus::Region::Unknown;
+        return validator.isValid(text, region) == want && region == wantRegion;
+    };
+    bool validOk = normalizeOk && checkValid("AB123CD", true, argus::Region::EU) &&
+                   checkValid("A1B", true, argus::Region::EU) &&
+                   checkValid("ABC1234XY", true, argus::Region::EU) &&
+                   checkValid("123", false, argus::Region::Unknown) &&
+                   checkValid("ABCD12345", false, argus::Region::Unknown) &&
+                   checkValid("", false, argus::Region::Unknown);
+    if (!validOk)
+    {
+        reason = "fixed case mismatch";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Validator checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Validator") << "Validator checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Validator checks: OK", "INFO");
+    ofLogNotice("Validator") << "Validator checks: OK";
+    return true;
+}
+
+bool ofApp::runOcrChecks()
+{
+    std::string reason;
+    if (!ocr.isReady())
+    {
+        reason = "engine unavailable";
+    }
+    else
+    {
+        ofImage probe;
+        probe.allocate(OCR_PROBE_SIZE, OCR_PROBE_SIZE, OF_IMAGE_GRAYSCALE);
+        argus::OcrResult probeResult = ocr.recognize(probe);
+        if (probeResult.meanConf < 0.0f || probeResult.meanConf > 100.0f)
+        {
+            reason = "probe confidence out of range";
+        }
+        else if (plateRoiImg.isAllocated())
+        {
+            argus::OcrResult roiResult = ocr.recognize(plateRoiImg);
+            if (roiResult.meanConf < 0.0f || roiResult.meanConf > 100.0f)
+            {
+                reason = "ROI confidence out of range";
+            }
+        }
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("OCR checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("OCR") << "OCR checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("OCR checks: OK", "INFO");
+    ofLogNotice("OCR") << "OCR checks: OK";
+    return true;
 }
 
 bool ofApp::runDetectorChecks()
@@ -276,8 +449,26 @@ void ofApp::drawPipelinePanel()
     {
         ImGui::BulletText("PlateDetector");
     }
-    ImGui::BulletText("PlateOCR");
-    ImGui::BulletText("PlateValidator");
+    if (bOcrRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("PlateOCR -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("PlateOCR");
+    }
+    if (bValidatorRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("PlateValidator -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("PlateValidator");
+    }
     ImGui::BulletText("FlagStore");
     ImGui::BulletText("AlertService");
     ImGui::BulletText("Logger");
@@ -404,6 +595,30 @@ void ofApp::drawDecisionSection()
     }
 }
 
+void ofApp::drawOcrChips()
+{
+    std::size_t count = std::min(lastOcrResult.text.size(), lastOcrResult.perCharConf.size());
+    std::string chips;
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        if (i > 0)
+        {
+            chips += " · ";
+        }
+        chips += lastOcrResult.text[i];
+        int percent = static_cast<int>(lastOcrResult.perCharConf[i]);
+        chips += " " + ofToString(percent) + "%";
+    }
+    if (chips.empty())
+    {
+        ImGui::Text("Per-char confidences unavailable, showing mean.");
+    }
+    else
+    {
+        ImGui::TextWrapped("%s", chips.c_str());
+    }
+}
+
 void ofApp::drawInspectorPanel()
 {
     if (!showInspector)
@@ -418,11 +633,36 @@ void ofApp::drawInspectorPanel()
         ImGui::Text("Flag type: -");
         ImGui::Text("Reason: -");
         ImGui::Text("Detection candidates: %d", static_cast<int>(candidates.size()));
+        ImGui::Text("Detected plate (raw): %s", rawPlateText.empty() ? "-" : rawPlateText.c_str());
+        ImGui::Text("Normalized: %s",
+                    normalizedPlateText.empty() ? "-" : normalizedPlateText.c_str());
+        if (plateValid)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+            ImGui::Text("Valid: Yes");
+            ImGui::PopStyleColor();
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.36f, 1.0f));
+            ImGui::Text("Valid: No");
+            ImGui::PopStyleColor();
+        }
+        ImGui::Text("Region: %s", regionName(detectedRegion).c_str());
     }
     if (ImGui::CollapsingHeader("OCR, per-char", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::TextWrapped("OCR not implemented yet.");
-        ImGui::Text("Mean: -");
+        if (lastOcrResult.text.empty())
+        {
+            ImGui::Text("Mean: -");
+            ImGui::Text("No text recognized.");
+        }
+        else
+        {
+            ImGui::Text("Mean: %.1f%%", lastOcrResult.meanConf);
+            drawOcrChips();
+            ImGui::Text("Normalization: O->0, I->1, uppercase, strip.");
+        }
     }
     if (ImGui::CollapsingHeader("Decision and notes", ImGuiTreeNodeFlags_DefaultOpen))
     {
@@ -548,8 +788,9 @@ void ofApp::drawCandidateOverlays()
     float scaleY = viewportImageRect.height / static_cast<float>(img.getHeight());
     ofPushStyle();
     ofNoFill();
-    for (const auto& candidate : candidates)
+    for (std::size_t i = 0; i < candidates.size(); ++i)
     {
+        const argus::PlateCandidate& candidate = candidates[i];
         float boxX = viewportImageRect.x + candidate.rect.x * scaleX;
         float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
         float boxW = candidate.rect.width * scaleX;
@@ -558,7 +799,18 @@ void ofApp::drawCandidateOverlays()
         ofDrawRectangle(boxX, boxY, boxW, boxH);
         ofSetColor(255, 255, 255);
         int percent = static_cast<int>(candidate.confidence * 100.0f);
-        ofDrawBitmapString(ofToString(percent) + "%", boxX, boxY - 6.0f);
+        std::string label = ofToString(percent) + "%";
+        if (bHasBest && i == 0 && !lastOcrResult.text.empty())
+        {
+            label = lastOcrResult.text + " " + label;
+        }
+        ofDrawBitmapStringHighlight(label, boxX, boxY - 8.0f);
+        if (bHasBest && i == 0 && !normalizedPlateText.empty() &&
+            normalizedPlateText != lastOcrResult.text)
+        {
+            std::string normLabel = normalizedPlateText + (plateValid ? " OK" : " ??");
+            ofDrawBitmapString(normLabel, boxX, boxY - 24.0f);
+        }
     }
     ofPopStyle();
 }

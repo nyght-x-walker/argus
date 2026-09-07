@@ -114,7 +114,7 @@ argus/
   ui_mockup.html  index.html  ARCHITECTURE.md  CMakeLists.txt
 ```
 
-> Conventions: `include/*.h` `#pragma once`, `namespace argus`, minimal includes; `src/*.cpp` functions **<40 lines** `CODE_STYLE.md:114`.
+> Conventions: `include/*.h` `#pragma once`, `namespace argus`, minimal includes; `src/*.cpp` functions **<40 lines** per project conventions.
 
 ---
 
@@ -125,7 +125,7 @@ argus/
 | **ImageSource** | `std::optional<Mat> load(path/videoFrame)` + `{w,h,bytes,fps,frameIdx,ts}` | MIME + 50 MB guard, `filesystem::canonical` reject `..`, header sniff |
 | **PlateDetector** | `vector<Rect> detect(const Mat, vector<double>& confs)` | `gray → bilateral → Canny → findContours → aspect 2–5, area 0.5%–15% → NMS`. `constexpr MIN_PLATE_AREA_FRACTION=0.005`. Empty = expected |
 | **PlateOCR** | `OcrResult{string text; double meanConf; vector<CharConf> perChar;}` | `TessBaseAPI`, `oem LSTM`, `psm SINGLE_LINE`, lang `eu/us/uk` from Settings |
-| **PlateValidator** | `string normalize(raw)` / `bool isValid(norm)` / `Region` | `upper, trim, O→0, I→1, 5→S, '-' strip` + `EU ^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$`. Live preview in badge + Flagged modal. Normalization constants per `CODE_STYLE.md:72` `UPPER_SNAKE_CASE`. |
+| **PlateValidator** | `string normalize(raw)` / `bool isValid(norm)` / `Region` | `upper, trim, O→0, I→1, 5→S, '-' strip` + `EU ^[A-Z]{1,3}[0-9]{1,4}[A-Z]{0,2}$`. Live preview in badge + Flagged modal. Normalization constants in `UPPER_SNAKE_CASE` per project conventions. |
 | **FlagStore** | `optional<FlagEntry> lookup(norm)` / `add/update/remove` / `save()` | `unordered_map<norm,FlagEntry>` + atomic `tmp→rename→fsync`. Fuzzy `lev≤1` only if `conf<85` |
 | **AlertService** | `bool shouldAlert(entry, Settings)` | `triggerAlert && status==Active && cooldown(now-lastAlert>5min)` → `QSystemTrayIcon::showMessage` |
 | **Logger** | `log(ScanEvent)` / `exportCsv(filter)` / `rotate()` | `logs{ts,imagePath,thumbPath,plateRaw,plateNorm,conf,perCharJson,flagMatch,flagType,region,decision,op,notes,mem}`. Graceful `ENOSPC → toast` |
@@ -249,7 +249,7 @@ pie title Memory Breakdown (1.42 / 4.0 GB = 34%)
   "Headroom" : 2600
 ```
 
-*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar `29:1` → click scrolls to `memoryPanel` `96:1`; sidebar widget `42:1` `1.4/4GB peak 2.1GB`; Dashboard gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+IMG_MEM_BUMP GB/image, +VID_MEM_BUMP GB/video` where `constexpr double IMG_MEM_BUMP=0.14; constexpr double VID_MEM_BUMP=0.38;` (CODE_STYLE.md:114).
+*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar `29:1` → click scrolls to `memoryPanel` `96:1`; sidebar widget `42:1` `1.4/4GB peak 2.1GB`; Dashboard gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+IMG_MEM_BUMP GB/image, +VID_MEM_BUMP GB/video` where `constexpr double IMG_MEM_BUMP=0.14; constexpr double VID_MEM_BUMP=0.38;` per project conventions.
 
 ---
 

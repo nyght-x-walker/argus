@@ -101,7 +101,7 @@ argus/
   of_mockup.html  ARCHITECTURE_OF.md  CMakeLists.txt
 ```
 
-> Conventions: `include/*.h` `#pragma once`, `namespace argus`, minimal includes; `src/*.cpp` functions **<40 lines** `CODE_STYLE.md:114`.
+> Conventions: `include/*.h` `#pragma once`, `namespace argus`, minimal includes; `src/*.cpp` functions **<40 lines** per project conventions.
 
 ---
 
@@ -238,7 +238,7 @@ pie title Memory Breakdown (1.42 / 4.0 GB = 34%)
   "Headroom" : 2600
 ```
 
-*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar → click scrolls to `memoryPanel`; sidebar widget `1.4/4GB peak 2.1GB`; OF gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+IMG_MEM_BUMP GB/image, +VID_MEM_BUMP GB/video` where `constexpr double IMG_MEM_BUMP=0.14; constexpr double VID_MEM_BUMP=0.38;` (CODE_STYLE.md:114).
+*Shown in 4 places:* header chip `MEM 1.4GB 34%` bar → click scrolls to `memoryPanel`; sidebar widget `1.4/4GB peak 2.1GB`; OF gauge `34% OK • headroom 2.6GB` + bars + 24-bar sparkline (5-min history); Scan bottom `Mem 342 MB` + right `MEMORY (THIS VIEW)` card. **Policy:** `Settings → Memory Management` limits `Max 3.20 GB / Image cache 512 MB / 24 frames`, `Auto-clear >85%` frees 40% img +70% vid, live drift `±0.02 GB/3.2s`, bumps `+IMG_MEM_BUMP GB/image, +VID_MEM_BUMP GB/video` where `constexpr double IMG_MEM_BUMP=0.14; constexpr double VID_MEM_BUMP=0.38;` per project conventions.
 
 *OF note:* decoded `cv::Mat` held until `mat.release()` after OCR + on view switch. Video decoding uses double-buffered queue. ImGui plot lines replace Tailwind gauge.
 
