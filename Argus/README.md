@@ -4,7 +4,8 @@ License plate recognition and flagging system, single-window GUI built
 with openFrameworks 0.12, ofxImGui, OpenCV and Tesseract 5. Image
 loading, the center viewport and the basic docked panels are in,
 plus the PlateDetector contour heuristic with viewport bounding
-box overlays and Tesseract reading of the best candidate.
+box overlays, Tesseract reading of the best candidate, and plate
+text normalization with EU shape validation.
 
 ## Dependencies
 
@@ -35,23 +36,25 @@ make
 
 ## Testing
 
-- In-app self-checks: `runStartupChecks()`, `runDetectorChecks()`
-  and `runOcrChecks()` run once in `setup()` and report to the
-  Console panel and stdout.
+- In-app self-checks: `runStartupChecks()`, `runDetectorChecks()`,
+  `runOcrChecks()` and `runValidatorChecks()` run once in `setup()`
+  and report to the Console panel and stdout.
 - Smoke script (no framework, deterministic, fast):
-  `./tests/smoke.sh` expects all three verdict lines.
+  `./tests/smoke.sh` expects all four verdict lines.
 - Manual UI pass: dock layout tiles on first run, the image is
   centered and aspect-fit, the Run button draws candidate boxes with
   confidence labels plus the recognized text on the best box, the
-  inspector shows plate text with per-character chips, `R` re-runs.
+  inspector shows raw, normalized, validity and region rows, `R`
+  re-runs.
 - Formatting: `clang-format --dry-run --Werror src/ofApp.h
   src/ofApp.cpp src/PlateDetector.h src/PlateDetector.cpp
-  src/PlateOCR.h src/PlateOCR.cpp` must pass against the root
-  `.clang-format`.
+  src/PlateOCR.h src/PlateOCR.cpp src/PlateValidator.h
+  src/PlateValidator.cpp` must pass against the root `.clang-format`.
 
 ## Known Limitations
 
 - Detection is a contour heuristic stub; boxes often miss the plate
   until OCR-backed validation lands.
+- Validation covers one EU generic shape; US and UK formats are
+  future work.
 - Small or angled plates read poorly; ROI upscaling is future work.
-- Confidence scores mix aspect estimates with Tesseract values.

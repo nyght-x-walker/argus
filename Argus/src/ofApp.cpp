@@ -31,6 +31,22 @@ constexpr float CONSOLE_AUTOSCROLL_MARGIN = 20.0f;
 // Low OCR mean threshold on the 0-100 Tesseract scale.
 constexpr float LOW_OCR_CONFIDENCE = 50.0f;
 
+// Maps a region verdict to its log label.
+std::string regionName(argus::Region region)
+{
+    switch (region)
+    {
+    case argus::Region::EU:
+        return "EU";
+    case argus::Region::US:
+        return "US";
+    case argus::Region::UK:
+        return "UK";
+    default:
+        return "Unknown";
+    }
+}
+
 // Pixel size of the synthetic probe image used by the OCR checks.
 constexpr int OCR_PROBE_SIZE = 10;
 
@@ -131,6 +147,9 @@ void ofApp::setup()
         logConsole("PlateOCR engine unavailable", "ERROR");
     }
     runOcrChecks();
+
+    logConsole("PlateValidator initialized", "INFO");
+    runValidatorChecks();
 }
 
 void ofApp::runDetection()
@@ -188,13 +207,76 @@ void ofApp::recognizeBestCandidate()
     {
         logConsole("[PlateOCR] empty result", "WARNING");
         ofLogNotice("PlateOCR") << "empty result";
+    }
+    else
+    {
+        std::string reading = "Recognized: '" + lastOcrResult.text + "' mean " +
+                              ofToString(lastOcrResult.meanConf, 1);
+        std::string level = lastOcrResult.meanConf < LOW_OCR_CONFIDENCE ? "WARNING" : "INFO";
+        logConsole("[PlateOCR] " + reading, level);
+        ofLogNotice("PlateOCR") << reading;
+    }
+    validatePlateText();
+}
+
+void ofApp::validatePlateText()
+{
+    rawPlateText = lastOcrResult.text;
+    normalizedPlateText = validator.normalize(rawPlateText);
+    plateValid = validator.isValid(normalizedPlateText, detectedRegion);
+    bValidatorRan = true;
+    if (normalizedPlateText.empty())
+    {
+        logConsole("[PlateValidator] normalization empty", "ERROR");
+        ofLogNotice("PlateValidator") << "normalization empty";
         return;
     }
-    std::string reading =
-        "Recognized: '" + lastOcrResult.text + "' mean " + ofToString(lastOcrResult.meanConf, 1);
-    std::string level = lastOcrResult.meanConf < LOW_OCR_CONFIDENCE ? "WARNING" : "INFO";
-    logConsole("[PlateOCR] " + reading, level);
-    ofLogNotice("PlateOCR") << reading;
+    logConsole("[PlateValidator] Raw: '" + rawPlateText + "' -> Normalized: '" +
+                   normalizedPlateText + "'",
+               "INFO");
+    std::string verdict = std::string("Valid: ") + (plateValid ? "yes" : "no") +
+                          " Region: " + regionName(detectedRegion);
+    std::string level = "INFO";
+    if (!plateValid && lastOcrResult.meanConf >= LOW_OCR_CONFIDENCE)
+    {
+        level = "WARNING";
+    }
+    logConsole("[PlateValidator] " + verdict, level);
+    ofLogNotice("PlateValidator") << verdict;
+}
+
+bool ofApp::runValidatorChecks()
+{
+    std::string reason;
+    bool normalizeOk = validator.normalize("ab123cd") == "AB123CD" &&
+                       validator.normalize("aB0O1I") == "AB0011" &&
+                       validator.normalize("!!!").empty();
+    auto checkValid = [&](const std::string& text, bool want, argus::Region wantRegion)
+    {
+        argus::Region region = argus::Region::Unknown;
+        return validator.isValid(text, region) == want && region == wantRegion;
+    };
+    bool validOk = normalizeOk && checkValid("AB123CD", true, argus::Region::EU) &&
+                   checkValid("A1B", true, argus::Region::EU) &&
+                   checkValid("ABC1234XY", true, argus::Region::EU) &&
+                   checkValid("123", false, argus::Region::Unknown) &&
+                   checkValid("ABCD12345", false, argus::Region::Unknown) &&
+                   checkValid("", false, argus::Region::Unknown);
+    if (!validOk)
+    {
+        reason = "fixed case mismatch";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Validator checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Validator") << "Validator checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Validator checks: OK", "INFO");
+    ofLogNotice("Validator") << "Validator checks: OK";
+    return true;
 }
 
 bool ofApp::runOcrChecks()
@@ -377,7 +459,16 @@ void ofApp::drawPipelinePanel()
     {
         ImGui::BulletText("PlateOCR");
     }
-    ImGui::BulletText("PlateValidator");
+    if (bValidatorRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("PlateValidator -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("PlateValidator");
+    }
     ImGui::BulletText("FlagStore");
     ImGui::BulletText("AlertService");
     ImGui::BulletText("Logger");
@@ -542,14 +633,22 @@ void ofApp::drawInspectorPanel()
         ImGui::Text("Flag type: -");
         ImGui::Text("Reason: -");
         ImGui::Text("Detection candidates: %d", static_cast<int>(candidates.size()));
-        if (lastOcrResult.text.empty())
+        ImGui::Text("Detected plate (raw): %s", rawPlateText.empty() ? "-" : rawPlateText.c_str());
+        ImGui::Text("Normalized: %s",
+                    normalizedPlateText.empty() ? "-" : normalizedPlateText.c_str());
+        if (plateValid)
         {
-            ImGui::Text("Detected plate: -");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+            ImGui::Text("Valid: Yes");
+            ImGui::PopStyleColor();
         }
         else
         {
-            ImGui::Text("Detected plate: %s", lastOcrResult.text.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.36f, 1.0f));
+            ImGui::Text("Valid: No");
+            ImGui::PopStyleColor();
         }
+        ImGui::Text("Region: %s", regionName(detectedRegion).c_str());
     }
     if (ImGui::CollapsingHeader("OCR, per-char", ImGuiTreeNodeFlags_DefaultOpen))
     {
@@ -562,6 +661,7 @@ void ofApp::drawInspectorPanel()
         {
             ImGui::Text("Mean: %.1f%%", lastOcrResult.meanConf);
             drawOcrChips();
+            ImGui::Text("Normalization: O->0, I->1, uppercase, strip.");
         }
     }
     if (ImGui::CollapsingHeader("Decision and notes", ImGuiTreeNodeFlags_DefaultOpen))
@@ -705,6 +805,12 @@ void ofApp::drawCandidateOverlays()
             label = lastOcrResult.text + " " + label;
         }
         ofDrawBitmapStringHighlight(label, boxX, boxY - 8.0f);
+        if (bHasBest && i == 0 && !normalizedPlateText.empty() &&
+            normalizedPlateText != lastOcrResult.text)
+        {
+            std::string normLabel = normalizedPlateText + (plateValid ? " OK" : " ??");
+            ofDrawBitmapString(normLabel, boxX, boxY - 24.0f);
+        }
     }
     ofPopStyle();
 }

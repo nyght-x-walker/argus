@@ -4,6 +4,7 @@
 
 #include "PlateDetector.h"
 #include "PlateOCR.h"
+#include "PlateValidator.h"
 #include "ofMain.h"
 #include "ofxImGui.h"
 
@@ -102,6 +103,30 @@ public:
 
     /// Verifies reader behavior on probe and ROI inputs.
     bool runOcrChecks();
+
+    /// Cleans OCR text and checks the EU generic shape.
+    argus::PlateValidator validator;
+
+    /// Raw OCR text feeding normalization.
+    std::string rawPlateText;
+
+    /// Normalized text shown in overlays and the inspector.
+    std::string normalizedPlateText;
+
+    /// EU shape verdict for the normalized text.
+    bool plateValid = false;
+
+    /// Region detected by the shape check.
+    argus::Region detectedRegion = argus::Region::Unknown;
+
+    /// True once a validation pass completed this session.
+    bool bValidatorRan = false;
+
+    /// Normalizes, validates and logs the latest OCR text.
+    void validatePlateText();
+
+    /// Verifies normalizer behavior on fixed cases.
+    bool runValidatorChecks();
 
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
