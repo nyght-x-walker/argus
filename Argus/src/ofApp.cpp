@@ -207,7 +207,12 @@ void ofApp::setup()
     runStartupChecks();
 
     logConsole("PlateDetector initialized", "INFO");
+    detector.minAreaFraction = detMinArea;
+    detector.maxAreaFraction = detMaxArea;
+    detector.minAspectRatio = detMinAR;
+    detector.maxAspectRatio = detMaxAR;
     runDetectorChecks();
+    runDetectionQualityChecks();
 
     if (ocr.isReady())
     {
@@ -654,6 +659,46 @@ bool ofApp::runDetectorChecks()
     }
     logConsole("Detector checks: OK", "INFO");
     ofLogNotice("Detector") << "Detector checks: OK";
+    return true;
+}
+
+bool ofApp::runDetectionQualityChecks()
+{
+    std::string reason;
+    ofImage tinyImage;
+    tinyImage.allocate(10, 10, OF_IMAGE_COLOR);
+    std::vector<argus::PlateCandidate> tinyOut = detector.detect(tinyImage);
+    std::vector<argus::PlateCandidate> sampleOut =
+        img.isAllocated() ? detector.detect(img) : tinyOut;
+    if (tinyOut.size() > 5 || sampleOut.empty() || sampleOut.size() > 5)
+    {
+        reason = "candidate count out of range";
+    }
+    else
+    {
+        for (const auto& candidate : sampleOut)
+        {
+            bool inside = candidate.rect.x >= 0.0f && candidate.rect.y >= 0.0f &&
+                          candidate.rect.x + candidate.rect.width <= img.getWidth() &&
+                          candidate.rect.y + candidate.rect.height <= img.getHeight();
+            bool scored = candidate.confidence >= 0.0f && candidate.confidence <= 1.0f;
+            if (!inside || !scored)
+            {
+                reason = "candidate out of bounds or unscored";
+                break;
+            }
+        }
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Detection quality checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Detector") << "Detection quality checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Detection quality checks: OK", "INFO");
+    ofLogNotice("Detector") << "Detection quality checks: OK";
     return true;
 }
 
