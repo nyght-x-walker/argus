@@ -1,5 +1,5 @@
 // Argus plate candidate detection on OF images.
-// Contour heuristic stub over OpenCV edges.
+// Bilateral smoothing, Canny edges, contour blobs at two scales.
 #pragma once
 
 #include "ofMain.h"
@@ -17,21 +17,23 @@ struct PlateCandidate
 };
 
 /// PlateDetector finds plate-like rectangles with an edge heuristic.
+/// Narrow and wide closings catch small and large plates respectively.
 class PlateDetector
 {
 public:
-    /// Detects up to MAX_CANDIDATES plate-like regions, largest first.
-    std::vector<PlateCandidate> detect(const ofImage& input);
-
-private:
-    // Lower floor admits small plates in 612x408 samples; the 0.5 percent
-    // architecture floor targets full-HD frames instead.
-    float minAreaFraction = 0.0005f;
+    /// Lower floor admits distant plates in 612px-wide samples.
+    float minAreaFraction = 0.002f;
     float maxAreaFraction = 0.15f;
-    float minAspect = 2.0f;
-    float maxAspect = 5.0f;
-    int cannyLow = 50;
-    int cannyHigh = 150;
+    float minAspectRatio = 2.0f;
+    float maxAspectRatio = 6.0f;
+    int cannyLow = 40;
+    int cannyHigh = 120;
+
+    /// Extra contour statistics on the console when enabled.
+    bool debugMode = false;
+
+    /// Detects up to MAX_CANDIDATES plate-like regions, best first.
+    std::vector<PlateCandidate> detect(const ofImage& input);
 };
 
 } // namespace argus

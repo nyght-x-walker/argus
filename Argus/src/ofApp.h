@@ -70,6 +70,12 @@ public:
     /// Heuristic plate detector over the loaded image.
     argus::PlateDetector detector;
 
+    /// Tunable detector geometry applied during setup.
+    float detMinArea = 0.002f;
+    float detMaxArea = 0.15f;
+    float detMinAR = 2.0f;
+    float detMaxAR = 6.0f;
+
     /// Latest detection candidates in image coordinates.
     std::vector<argus::PlateCandidate> candidates;
 
@@ -84,6 +90,9 @@ public:
 
     /// Verifies detector behavior on sample and edge inputs.
     bool runDetectorChecks();
+
+    /// Verifies candidate counts and bounds on fixed inputs.
+    bool runDetectionQualityChecks();
 
     /// Tesseract reader over the cropped best candidate.
     argus::PlateOCR ocr;
