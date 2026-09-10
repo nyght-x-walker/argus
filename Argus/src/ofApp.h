@@ -2,13 +2,16 @@
 // Image loading, center viewport and basic docked panels.
 #pragma once
 
+#include "AlertService.h"
 #include "FlagStore.h"
+#include "Logger.h"
 #include "PlateDetector.h"
 #include "PlateOCR.h"
 #include "PlateValidator.h"
 #include "ofMain.h"
 #include "ofxImGui.h"
 
+#include <chrono>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -148,6 +151,65 @@ public:
     /// Verifies store load and lookup behavior on fixed cases.
     bool runFlagChecks();
 
+    /// Cooldown gate for flagged plate banners.
+    argus::AlertService alertService;
+
+    /// Append-only store for operator scan decisions.
+    argus::Logger logger;
+
+    /// Last alert time used for cooldown measurement.
+    std::chrono::steady_clock::time_point lastAlertTime;
+
+    /// Current operator decision shown in the inspector.
+    std::string currentDecision = "Review";
+
+    /// Operator notes synced from the inspector input.
+    std::string operatorNotes;
+
+    /// Scan log path resolved through the OF data folder.
+    std::string scanLogPath = "resources/logs.jsonl";
+
+    /// True when the latest run raised an alert banner.
+    bool bAlertActive = false;
+
+    /// Banner text for the latest alert, empty when quiet.
+    std::string alertBannerText;
+
+    /// True once an alert evaluation completed this session.
+    bool bAlertRan = false;
+
+    /// True once a decision was saved this session.
+    bool bLoggerRan = false;
+
+    /// Toast shown after saving a decision.
+    std::string saveToastText;
+
+    /// Decision choices shared by buttons and logging.
+    enum class Decision
+    {
+        Allow,
+        Block,
+        Review
+    };
+
+    /// Evaluates the watchlist hit against cooldown rules.
+    void checkAlert();
+
+    /// Builds a scan event and appends it to the log.
+    void saveDecisionAndLog();
+
+    /// Verifies alert gating on fixed cases.
+    bool runAlertChecks();
+
+    /// Verifies logger round-trip on fixed cases.
+    bool runLoggerChecks();
+
+    /// Writes and re-parses one probe event for the self-check.
+    bool verifyLoggerRoundTrip(std::string& reason);
+
+    /// Converts a decision choice to its log label.
+    static std::string decisionName(Decision decision);
+
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
 
@@ -196,6 +258,18 @@ private:
 
     /// Draws the watchlist table inside the Flagged tab.
     void drawFlaggedTab();
+
+    /// Draws the alert banner over the viewport when active.
+    void drawAlertBanner();
+
+    /// Draws recent scan events inside the Logs and Alerts tab.
+    void drawLogsTab();
+
+    /// Draws the column headers for the scan event table.
+    void drawLogsHeader();
+
+    /// Draws one scan event row with severity highlighting.
+    void drawLogsRow(const argus::ScanEvent& event);
 
     /// Draws the loaded image into the captured viewport rect.
     void drawViewportImage();
