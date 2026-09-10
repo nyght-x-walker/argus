@@ -4,8 +4,9 @@ License plate recognition and flagging system, single-window GUI built
 with openFrameworks 0.12, ofxImGui, OpenCV and Tesseract 5. Image
 loading, the center viewport and the basic docked panels are in,
 plus the PlateDetector contour heuristic with viewport bounding
-box overlays, Tesseract reading of the best candidate, and plate
-text normalization with EU shape validation.
+box overlays, Tesseract reading of the best candidate, plate text
+normalization with EU shape validation, and a JSON watchlist with
+lookup, Inspector display and a Flagged tab.
 
 ## Dependencies
 
@@ -36,20 +37,21 @@ make
 
 ## Testing
 
-- In-app self-checks: `runStartupChecks()`, `runDetectorChecks()`,
-  `runOcrChecks()` and `runValidatorChecks()` run once in `setup()`
-  and report to the Console panel and stdout.
+- In-app self-checks: startup, detector, recognizer, validator and
+  watchlist checks run once in `setup()` and report to the Console
+  panel and stdout.
 - Smoke script (no framework, deterministic, fast):
-  `./tests/smoke.sh` expects all four verdict lines.
+  `./tests/smoke.sh` expects all five verdict lines.
 - Manual UI pass: dock layout tiles on first run, the image is
   centered and aspect-fit, the Run button draws candidate boxes with
   confidence labels plus the recognized text on the best box, the
-  inspector shows raw, normalized, validity and region rows, `R`
-  re-runs.
+  inspector shows raw, normalized, validity, region and watchlist
+  rows, the Flagged tab lists the seed entries, `R` re-runs.
 - Formatting: `clang-format --dry-run --Werror src/ofApp.h
   src/ofApp.cpp src/PlateDetector.h src/PlateDetector.cpp
   src/PlateOCR.h src/PlateOCR.cpp src/PlateValidator.h
-  src/PlateValidator.cpp` must pass against the root `.clang-format`.
+  src/PlateValidator.cpp src/FlagStore.h src/FlagStore.cpp` must
+  pass against the root `.clang-format`.
 
 ## Known Limitations
 
@@ -57,4 +59,5 @@ make
   until OCR-backed validation lands.
 - Validation covers one EU generic shape; US and UK formats are
   future work.
+- The watchlist is exact-match on normalized text with no editing UI.
 - Small or angled plates read poorly; ROI upscaling is future work.

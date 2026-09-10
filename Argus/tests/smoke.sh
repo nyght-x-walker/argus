@@ -51,6 +51,8 @@ check "recognizer self-check verdict OK" \
     'grep -q "OCR checks: OK" smoke.log'
 check "validator self-check verdict OK" \
     'grep -q "Validator checks: OK" smoke.log'
+check "watchlist self-check verdict OK" \
+    'grep -q "Flag checks: OK" smoke.log'
 rm -f smoke.log
 
 if [ "$FAILURES" -ne 0 ]; then

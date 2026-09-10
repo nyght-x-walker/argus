@@ -3,9 +3,13 @@
 #include "ofApp.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cstring>
+#include <fstream>
 
 #include "imgui_internal.h"
+#include "ofJson.h"
 
 namespace
 {
@@ -30,6 +34,73 @@ constexpr float CONSOLE_AUTOSCROLL_MARGIN = 20.0f;
 
 // Low OCR mean threshold on the 0-100 Tesseract scale.
 constexpr float LOW_OCR_CONFIDENCE = 50.0f;
+
+// Overlay box colors for plain and watchlist-matched candidates.
+const ofColor BOX_OK_COLOR(126, 202, 156);
+const ofColor BOX_FLAG_COLOR(224, 108, 91);
+
+// Vertical offset of the watchlist label below a matched box.
+constexpr float FLAG_LABEL_OFFSET_Y = 14.0f;
+
+// Column count of the watchlist table in the Flagged tab.
+constexpr int FLAG_TABLE_COLUMNS = 5;
+
+// Column count of the scan event table in the Logs tab.
+constexpr int LOG_TABLE_COLUMNS = 7;
+
+// Startup offset so the first alert can fire immediately.
+constexpr int ALERT_INIT_OFFSET_MINUTES = 10;
+
+// Test log path for the logger self-check round-trip.
+constexpr char LOGGER_TEST_LOG_PATH[] = "resources/test_logs.jsonl";
+
+// Maps a flag verdict to its uppercase log label.
+std::string flagTypeTag(argus::FlagType type)
+{
+    switch (type)
+    {
+    case argus::FlagType::Blocked:
+        return "BLOCKED";
+    case argus::FlagType::Authorized:
+        return "AUTHORIZED";
+    default:
+        return "SUSPICIOUS";
+    }
+}
+
+// Reads the last non-empty line from a text file.
+bool readLastNonEmptyLine(const std::string& absolutePath, std::string& lastLine)
+{
+    std::ifstream input(absolutePath);
+    if (!input.is_open())
+    {
+        return false;
+    }
+    std::string line;
+    lastLine.clear();
+    while (std::getline(input, line))
+    {
+        if (!line.empty())
+        {
+            lastLine = line;
+        }
+    }
+    return !lastLine.empty();
+}
+
+// Checks one probe JSON line for the expected plate value.
+bool isProbeLineValid(const std::string& lastLine)
+{
+    try
+    {
+        ofJson parsed = ofJson::parse(lastLine);
+        return parsed.value("plateNorm", "") == "AB123CD";
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
 
 // Maps a region verdict to its log label.
 std::string regionName(argus::Region region)
@@ -150,6 +221,28 @@ void ofApp::setup()
 
     logConsole("PlateValidator initialized", "INFO");
     runValidatorChecks();
+
+    if (!ofFile::doesFileExist(flaggedJsonPath))
+    {
+        logConsole("[FlagStore] No flagged.json found, empty watchlist", "INFO");
+    }
+    else if (flagStore.load(flaggedJsonPath))
+    {
+        std::string count = ofToString(flagStore.entries().size());
+        logConsole("[FlagStore] Loaded " + count + " entries from flagged.json", "INFO");
+    }
+    else
+    {
+        logConsole("[FlagStore] Failed to parse flagged.json", "ERROR");
+    }
+    runFlagChecks();
+
+    lastAlertTime =
+        std::chrono::steady_clock::now() - std::chrono::minutes(ALERT_INIT_OFFSET_MINUTES);
+    logConsole("[AlertService] Initialized with 5min cooldown", "INFO");
+    logConsole("[Logger] Will log to resources/logs.jsonl", "INFO");
+    runAlertChecks();
+    runLoggerChecks();
 }
 
 void ofApp::runDetection()
@@ -217,6 +310,8 @@ void ofApp::recognizeBestCandidate()
         ofLogNotice("PlateOCR") << reading;
     }
     validatePlateText();
+    lookupFlag();
+    checkAlert();
 }
 
 void ofApp::validatePlateText()
@@ -276,6 +371,220 @@ bool ofApp::runValidatorChecks()
     }
     logConsole("Validator checks: OK", "INFO");
     ofLogNotice("Validator") << "Validator checks: OK";
+    return true;
+}
+
+void ofApp::lookupFlag()
+{
+    currentMatch.reset();
+    if (normalizedPlateText.empty())
+    {
+        return;
+    }
+    currentMatch = flagStore.lookup(normalizedPlateText);
+    bFlagRan = true;
+    std::string outcome = currentMatch.has_value() ? "found" : "not found";
+    logConsole("[FlagStore] Lookup '" + normalizedPlateText + "' -> " + outcome, "INFO");
+    ofLogNotice("FlagStore") << "Lookup '" << normalizedPlateText << "' -> " << outcome;
+    if (!currentMatch.has_value())
+    {
+        return;
+    }
+    const argus::FlagEntry& entry = currentMatch.value();
+    std::string detail =
+        "Type: " + argus::flagTypeToString(entry.type) + ", Reason: " + entry.reason;
+    bool alertWorthy = entry.type != argus::FlagType::Authorized;
+    logConsole("[FlagStore] " + detail, alertWorthy ? "WARNING" : "INFO");
+    ofLogNotice("FlagStore") << detail;
+}
+
+bool ofApp::runFlagChecks()
+{
+    std::string reason;
+    argus::FlagStore probe;
+    if (ofFile::doesFileExist(flaggedJsonPath))
+    {
+        if (!probe.load(flaggedJsonPath))
+        {
+            reason = "seed file failed to load";
+        }
+        else
+        {
+            std::optional<argus::FlagEntry> hit = probe.lookup("AB123CD");
+            std::optional<argus::FlagEntry> miss = probe.lookup("ZZ999ZZ");
+            bool hitOk = hit.has_value() && hit->type == argus::FlagType::Blocked;
+            if (!hitOk || miss.has_value())
+            {
+                reason = "lookup mismatch on fixed cases";
+            }
+        }
+    }
+    else if (probe.lookup("AB123CD").has_value())
+    {
+        reason = "empty store returned a hit";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Flag checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Flag") << "Flag checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Flag checks: OK", "INFO");
+    ofLogNotice("Flag") << "Flag checks: OK";
+    return true;
+}
+
+std::string ofApp::decisionName(Decision decision)
+{
+    switch (decision)
+    {
+    case Decision::Allow:
+        return "Allow";
+    case Decision::Block:
+        return "Block";
+    default:
+        return "Review";
+    }
+}
+
+void ofApp::checkAlert()
+{
+    bAlertRan = true;
+    bAlertActive = false;
+    alertBannerText.clear();
+    if (!currentMatch.has_value())
+    {
+        return;
+    }
+    auto now = std::chrono::steady_clock::now();
+    double seconds = std::chrono::duration<double>(now - lastAlertTime).count();
+    if (!alertService.shouldAlert(currentMatch.value(), seconds))
+    {
+        return;
+    }
+    // Cooldown passed, raise the banner and restart the window.
+    const argus::FlagEntry& entry = currentMatch.value();
+    alertBannerText = "FLAGGED PLATE DETECTED - " + argus::flagTypeToString(entry.type);
+    bAlertActive = true;
+    lastAlertTime = now;
+    std::string warn = "[AlertService] FLAGGED " + entry.plate + " - " +
+                       argus::flagTypeToString(entry.type) + " -> alert triggered";
+    logConsole(warn, "WARNING");
+    ofLogNotice("AlertService") << warn;
+}
+
+void ofApp::saveDecisionAndLog()
+{
+    operatorNotes = std::string(notesBuffer);
+    argus::ScanEvent event;
+    event.timestamp = ofGetTimestampString("%Y-%m-%d %H:%M:%S");
+    event.imagePath = SAMPLE_IMAGE_PATH;
+    event.plateRaw = rawPlateText;
+    event.plateNorm = normalizedPlateText;
+    event.ocrConf = lastOcrResult.meanConf;
+    event.flagMatch = currentMatch.has_value();
+    event.region = regionName(detectedRegion);
+    event.decision = currentDecision;
+    event.operatorNotes = operatorNotes;
+    if (event.flagMatch)
+    {
+        event.flagType = flagTypeTag(currentMatch->type);
+    }
+    logger.log(event, scanLogPath);
+    bLoggerRan = true;
+    saveToastText = "Decision saved -> logs.jsonl";
+    std::string info = "[Logger] Logged scan event for " + normalizedPlateText + " -> logs.jsonl";
+    logConsole(info, "INFO");
+    ofLogNotice("Logger") << info;
+}
+
+bool ofApp::runAlertChecks()
+{
+    std::string reason;
+    argus::AlertService probe;
+    argus::FlagEntry blocked{"AB123CD", argus::FlagType::Blocked, "probe", "", "", true};
+    argus::FlagEntry authorized{"KL555MN", argus::FlagType::Authorized, "probe", "", "", true};
+    argus::FlagEntry silent = blocked;
+    silent.triggerAlert = false;
+    if (!probe.shouldAlert(blocked, 1000.0))
+    {
+        reason = "alert-worthy blocked rejected";
+    }
+    else if (probe.shouldAlert(blocked, 10.0))
+    {
+        reason = "cooldown not enforced";
+    }
+    else if (probe.shouldAlert(authorized, 1000.0))
+    {
+        reason = "authorized raised alert";
+    }
+    else if (probe.shouldAlert(silent, 1000.0))
+    {
+        reason = "disabled trigger raised alert";
+    }
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Alert checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Alert") << "Alert checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Alert checks: OK", "INFO");
+    ofLogNotice("Alert") << "Alert checks: OK";
+    return true;
+}
+
+bool ofApp::runLoggerChecks()
+{
+    std::string reason;
+    if (!verifyLoggerRoundTrip(reason))
+    {
+        reason = "logger round-trip failed: " + reason;
+    }
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Logger checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Logger") << "Logger checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Logger checks: OK", "INFO");
+    ofLogNotice("Logger") << "Logger checks: OK";
+    return true;
+}
+
+bool ofApp::verifyLoggerRoundTrip(std::string& reason)
+{
+    // Fixed probe event keeps the self-check deterministic.
+    argus::ScanEvent probeEvent;
+    probeEvent.timestamp = "2026-01-01 00:00:00";
+    probeEvent.imagePath = SAMPLE_IMAGE_PATH;
+    probeEvent.plateRaw = "ab123cd";
+    probeEvent.plateNorm = "AB123CD";
+    probeEvent.ocrConf = 92.5f;
+    probeEvent.flagMatch = true;
+    probeEvent.flagType = "BLOCKED";
+    probeEvent.region = "EU";
+    probeEvent.decision = "Review";
+    probeEvent.operatorNotes = "alert probe";
+    logger.log(probeEvent, LOGGER_TEST_LOG_PATH);
+
+    // Read back the last line and re-parse it as JSON.
+    std::string absolutePath = ofToDataPath(LOGGER_TEST_LOG_PATH, false);
+    std::string lastLine;
+    if (!readLastNonEmptyLine(absolutePath, lastLine))
+    {
+        reason = "test log missing or empty";
+        return false;
+    }
+    if (!isProbeLineValid(lastLine))
+    {
+        reason = "invalid JSON line";
+        return false;
+    }
+    std::remove(absolutePath.c_str());
     return true;
 }
 
@@ -469,9 +778,42 @@ void ofApp::drawPipelinePanel()
     {
         ImGui::BulletText("PlateValidator");
     }
-    ImGui::BulletText("FlagStore");
-    ImGui::BulletText("AlertService");
-    ImGui::BulletText("Logger");
+    if (bFlagRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("FlagStore -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("FlagStore");
+    }
+    if (bAlertActive)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.36f, 1.0f));
+        ImGui::BulletText("AlertService -> alert");
+        ImGui::PopStyleColor();
+    }
+    else if (bAlertRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("AlertService -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("AlertService");
+    }
+    if (bLoggerRan)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+        ImGui::BulletText("Logger -> active");
+        ImGui::PopStyleColor();
+    }
+    else
+    {
+        ImGui::BulletText("Logger");
+    }
     ImGui::Separator();
 
     ImGui::SliderFloat("Confidence thr", &confidenceThreshold, MIN_CONFIDENCE, MAX_CONFIDENCE,
@@ -567,31 +909,52 @@ void ofApp::drawViewportPanel()
     bViewportRectValid = true;
     ImGui::Dummy(ImVec2(contentAvail.x, imageAvailH));
 
+    drawAlertBanner();
     drawViewportToolbar();
     ImGui::End();
+}
+
+void ofApp::drawAlertBanner()
+{
+    if (!bAlertActive || alertBannerText.empty())
+    {
+        return;
+    }
+    // Simple banner label over the viewport area.
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.36f, 1.0f));
+    ImGui::TextWrapped("%s", alertBannerText.c_str());
+    ImGui::PopStyleColor();
 }
 
 void ofApp::drawDecisionSection()
 {
     if (ImGui::Button("Allow"))
     {
-        logConsole("Decision: Allow, stub", "INFO");
+        currentDecision = decisionName(Decision::Allow);
+        logConsole("Decision: Allow", "INFO");
     }
     ImGui::SameLine();
     if (ImGui::Button("Block"))
     {
-        logConsole("Decision: Block, stub", "WARNING");
+        currentDecision = decisionName(Decision::Block);
+        logConsole("Decision: Block", "WARNING");
     }
     ImGui::SameLine();
     if (ImGui::Button("Review"))
     {
-        logConsole("Decision: Review, stub", "INFO");
+        currentDecision = decisionName(Decision::Review);
+        logConsole("Decision: Review", "INFO");
     }
+    ImGui::Text("Current: %s", currentDecision.c_str());
     ImGui::InputTextMultiline("notes", notesBuffer, sizeof(notesBuffer),
                               ImVec2(-1.0f, NOTES_INPUT_HEIGHT));
     if (ImGui::Button("Save Decision & Log (Enter)"))
     {
-        logConsole("Decision saved, stub", "INFO");
+        saveDecisionAndLog();
+    }
+    if (!saveToastText.empty())
+    {
+        ImGui::TextDisabled("%s", saveToastText.c_str());
     }
 }
 
@@ -629,9 +992,22 @@ void ofApp::drawInspectorPanel()
     ImGui::Begin(INSPECTOR_WINDOW_TITLE, &showInspector);
     if (ImGui::CollapsingHeader("Match Info", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Text("Watchlist: -");
-        ImGui::Text("Flag type: -");
-        ImGui::Text("Reason: -");
+        if (currentMatch.has_value())
+        {
+            const argus::FlagEntry& entry = currentMatch.value();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.49f, 0.79f, 0.61f, 1.0f));
+            ImGui::Text("Watchlist Match: YES");
+            ImGui::PopStyleColor();
+            ImGui::Text("Flag type: %s", argus::flagTypeToString(entry.type).c_str());
+            ImGui::Text("Reason: %s", entry.reason.c_str());
+            ImGui::Text("Tags: %s", entry.tags.c_str());
+        }
+        else
+        {
+            ImGui::Text("Watchlist Match: NO");
+            ImGui::Text("Flag type: -");
+            ImGui::Text("Reason: -");
+        }
         ImGui::Text("Detection candidates: %d", static_cast<int>(candidates.size()));
         ImGui::Text("Detected plate (raw): %s", rawPlateText.empty() ? "-" : rawPlateText.c_str());
         ImGui::Text("Normalized: %s",
@@ -718,6 +1094,110 @@ void ofApp::drawConsoleTab()
     ImGui::EndChild();
 }
 
+void ofApp::drawFlaggedTab()
+{
+    std::vector<argus::FlagEntry> rows = flagStore.entries();
+    if (rows.empty())
+    {
+        ImGui::Text("No flagged plates loaded");
+        return;
+    }
+    ImGui::Columns(FLAG_TABLE_COLUMNS, "FlaggedColumns", true);
+    ImGui::Text("Plate");
+    ImGui::NextColumn();
+    ImGui::Text("Type");
+    ImGui::NextColumn();
+    ImGui::Text("Reason");
+    ImGui::NextColumn();
+    ImGui::Text("Added");
+    ImGui::NextColumn();
+    ImGui::Text("Status");
+    ImGui::NextColumn();
+    ImGui::Separator();
+    for (const auto& row : rows)
+    {
+        ImGui::Text("%s", row.plate.c_str());
+        ImGui::NextColumn();
+        ImGui::Text("%s", argus::flagTypeToString(row.type).c_str());
+        ImGui::NextColumn();
+        ImGui::Text("%s", row.reason.c_str());
+        ImGui::NextColumn();
+        ImGui::Text("%s", row.addedDate.c_str());
+        ImGui::NextColumn();
+        ImGui::Text("Active");
+        ImGui::NextColumn();
+    }
+    ImGui::Columns(1);
+}
+
+void ofApp::drawLogsTab()
+{
+    if (logger.recentEvents.empty())
+    {
+        ImGui::Text("No log entries yet");
+        return;
+    }
+    ImGui::Columns(LOG_TABLE_COLUMNS, "LogsColumns", true);
+    drawLogsHeader();
+    ImGui::Separator();
+    for (const auto& event : logger.recentEvents)
+    {
+        drawLogsRow(event);
+    }
+    ImGui::Columns(1);
+}
+
+void ofApp::drawLogsHeader()
+{
+    ImGui::Text("Time");
+    ImGui::NextColumn();
+    ImGui::Text("Plate");
+    ImGui::NextColumn();
+    ImGui::Text("Conf");
+    ImGui::NextColumn();
+    ImGui::Text("Flag");
+    ImGui::NextColumn();
+    ImGui::Text("Type");
+    ImGui::NextColumn();
+    ImGui::Text("Decision");
+    ImGui::NextColumn();
+    ImGui::Text("Op");
+    ImGui::NextColumn();
+}
+
+void ofApp::drawLogsRow(const argus::ScanEvent& event)
+{
+    // Highlight blocked and suspicious rows by severity.
+    bool isBlocked = event.flagType == "BLOCKED";
+    bool isSuspicious = event.flagType == "SUSPICIOUS";
+    if (isBlocked)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.42f, 0.36f, 1.0f));
+    }
+    else if (isSuspicious)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.71f, 0.34f, 1.0f));
+    }
+    ImGui::Text("%s", event.timestamp.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", event.plateNorm.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%.1f", event.ocrConf);
+    ImGui::NextColumn();
+    ImGui::Text("%s", event.flagMatch ? "YES" : "NO");
+    ImGui::NextColumn();
+    ImGui::Text("%s", event.flagType.empty() ? "-" : event.flagType.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", event.decision.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", event.operatorNotes.c_str());
+    ImGui::NextColumn();
+    if (isBlocked || isSuspicious)
+    {
+        ImGui::PopStyleColor();
+    }
+}
+
 void ofApp::drawConsolePanel()
 {
     if (!showConsole)
@@ -735,12 +1215,12 @@ void ofApp::drawConsolePanel()
         }
         if (ImGui::BeginTabItem("Flagged"))
         {
-            ImGui::Text("Not implemented yet.");
+            drawFlaggedTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Logs and Alerts"))
         {
-            ImGui::Text("Not implemented yet.");
+            drawLogsTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Memory"))
@@ -795,7 +1275,8 @@ void ofApp::drawCandidateOverlays()
         float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
         float boxW = candidate.rect.width * scaleX;
         float boxH = candidate.rect.height * scaleY;
-        ofSetColor(126, 202, 156);
+        bool flagged = bHasBest && i == 0 && currentMatch.has_value();
+        ofSetColor(flagged ? BOX_FLAG_COLOR : BOX_OK_COLOR);
         ofDrawRectangle(boxX, boxY, boxW, boxH);
         ofSetColor(255, 255, 255);
         int percent = static_cast<int>(candidate.confidence * 100.0f);
@@ -805,6 +1286,10 @@ void ofApp::drawCandidateOverlays()
             label = lastOcrResult.text + " " + label;
         }
         ofDrawBitmapStringHighlight(label, boxX, boxY - 8.0f);
+        if (flagged)
+        {
+            ofDrawBitmapString("FLAGGED", boxX, boxY + boxH + FLAG_LABEL_OFFSET_Y);
+        }
         if (bHasBest && i == 0 && !normalizedPlateText.empty() &&
             normalizedPlateText != lastOcrResult.text)
         {
