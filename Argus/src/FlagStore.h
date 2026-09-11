@@ -48,6 +48,9 @@ public:
     /// Returns the entry for normalized plate text, if flagged.
     std::optional<FlagEntry> lookup(const std::string& normalizedPlate) const;
 
+    /// Returns the closest entry within one glyph edit, if flagged.
+    std::optional<FlagEntry> lookupFuzzy(const std::string& normalizedPlate) const;
+
     /// Returns all entries ordered by plate text.
     std::vector<FlagEntry> entries() const;
 

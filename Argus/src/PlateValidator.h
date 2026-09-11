@@ -31,10 +31,13 @@ public:
     /// Uppercases, strips noise and repairs O/I confusions.
     std::string normalize(const std::string& raw) const;
 
+    /// Tries single confusion swaps until the EU shape accepts.
+    std::string repair(const std::string& normalized) const;
+
     /// Checks the EU generic shape, reporting the region on success.
     bool isValid(const std::string& normalized, Region& region) const;
 
-    /// Normalizes then validates in one call.
+    /// Normalizes, repairs one confusion, then validates in one call.
     ValidationResult validate(const std::string& raw) const;
 };
 

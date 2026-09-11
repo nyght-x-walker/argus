@@ -45,6 +45,9 @@ constexpr int FLAG_TABLE_COLUMNS = 5;
 // Column count of the scan event table in the Logs tab.
 constexpr int LOG_TABLE_COLUMNS = 7;
 
+// Mean confidence below which a near-miss watchlist hit still counts.
+constexpr float FUZZY_MAX_CONF = 85.0f;
+
 // Startup offset so the first alert can fire immediately.
 constexpr int ALERT_INIT_OFFSET_MINUTES = 10;
 
@@ -289,25 +292,68 @@ ScanResult ofApp::processFrame(const ofImage& frame)
     {
         return result;
     }
-    // Candidates arrive best first, so the front box drives the read.
-    result.bestCandidate = result.candidates.front();
-    result.hasBest = true;
+    std::vector<argus::PlateCandidate> kept = result.candidates;
+    result = voteReading(frame, result.candidates);
+    result.candidates = kept;
+    lookupWatchlistMatch(result);
+    return result;
+}
+
+ScanResult ofApp::voteReading(const ofImage& frame,
+                              const std::vector<argus::PlateCandidate>& candidates)
+{
+    ScanResult best;
+    float bestScore = -1.0f;
+    int voteCount = std::min(ocrVoteCount, static_cast<int>(candidates.size()));
+    // Valid reads win, confidence breaks ties and salvages misses.
+    for (int vote = 0; vote < voteCount; ++vote)
+    {
+        ScanResult attempt = readVoteBox(frame, candidates[vote]);
+        float score = attempt.plateValid ? 1000.0f + attempt.ocr.meanConf : attempt.ocr.meanConf;
+        if (score <= bestScore)
+        {
+            continue;
+        }
+        bestScore = score;
+        best = attempt;
+    }
+    return best;
+}
+
+void ofApp::lookupWatchlistMatch(ScanResult& result)
+{
+    if (result.normalizedPlate.empty())
+    {
+        return;
+    }
+    result.match = flagStore.lookup(result.normalizedPlate);
+    if (result.match.has_value() || result.ocr.meanConf >= FUZZY_MAX_CONF)
+    {
+        return;
+    }
+    // Low-confidence reads may err by one glyph, allow near miss.
+    result.match = flagStore.lookupFuzzy(result.normalizedPlate);
+}
+
+ScanResult ofApp::readVoteBox(const ofImage& frame, const argus::PlateCandidate& box)
+{
+    ScanResult vote;
+    vote.bestCandidate = box;
+    vote.hasBest = true;
     float frameWidth = static_cast<float>(frame.getWidth());
     float frameHeight = static_cast<float>(frame.getHeight());
-    float roiX = ofClamp(result.bestCandidate.rect.x, 0.0f, frameWidth - 1.0f);
-    float roiY = ofClamp(result.bestCandidate.rect.y, 0.0f, frameHeight - 1.0f);
-    float roiW = ofClamp(result.bestCandidate.rect.width, 1.0f, frameWidth - roiX);
-    float roiH = ofClamp(result.bestCandidate.rect.height, 1.0f, frameHeight - roiY);
-    result.roiImage.cropFrom(frame, roiX, roiY, roiW, roiH);
-    result.ocr = ocr.recognize(result.roiImage);
-    result.rawPlate = result.ocr.text;
-    result.normalizedPlate = validator.normalize(result.rawPlate);
-    result.plateValid = validator.isValid(result.normalizedPlate, result.region);
-    if (!result.normalizedPlate.empty())
-    {
-        result.match = flagStore.lookup(result.normalizedPlate);
-    }
-    return result;
+    float roiX = ofClamp(box.rect.x, 0.0f, frameWidth - 1.0f);
+    float roiY = ofClamp(box.rect.y, 0.0f, frameHeight - 1.0f);
+    float roiW = ofClamp(box.rect.width, 1.0f, frameWidth - roiX);
+    float roiH = ofClamp(box.rect.height, 1.0f, frameHeight - roiY);
+    vote.roiImage.cropFrom(frame, roiX, roiY, roiW, roiH);
+    vote.ocr = ocr.recognize(vote.roiImage);
+    vote.rawPlate = vote.ocr.text;
+    std::string plain = validator.normalize(vote.rawPlate);
+    vote.normalizedPlate = validator.repair(plain);
+    vote.wasRepaired = (vote.normalizedPlate != plain);
+    vote.plateValid = validator.isValid(vote.normalizedPlate, vote.region);
+    return vote;
 }
 
 void ofApp::applyScanResult(const ScanResult& result, const std::string& label)
@@ -367,6 +413,8 @@ bool ofApp::runPipelineChecks()
         {
             reason = "sample frame result implausible";
         }
+        // Report the full chain so headless runs show end-to-end health.
+        logPipelineSummary(sampleResult, "check");
     }
     else
     {
@@ -413,6 +461,10 @@ void ofApp::logValidationDetails(const ScanResult& result)
     logConsole("[PlateValidator] Raw: '" + rawPlateText + "' -> Normalized: '" +
                    normalizedPlateText + "'",
                "INFO");
+    if (result.wasRepaired)
+    {
+        logConsole("[PlateValidator] Corrected -> '" + normalizedPlateText + "'", "INFO");
+    }
     std::string verdict = std::string("Valid: ") + (plateValid ? "yes" : "no") +
                           " Region: " + regionName(detectedRegion);
     std::string level = "INFO";
@@ -476,7 +528,9 @@ bool ofApp::runValidatorChecks()
                    checkValid("123", false, argus::Region::Unknown) &&
                    checkValid("ABCD12345", false, argus::Region::Unknown) &&
                    checkValid("", false, argus::Region::Unknown);
-    if (!validOk)
+    bool repairOk = validator.repair("SN6GXMZ") == "SN66XMZ" &&
+                    validator.repair("AB123CD") == "AB123CD" && validator.repair("").empty();
+    if (!validOk || !repairOk)
     {
         reason = "fixed case mismatch";
     }
@@ -508,7 +562,11 @@ bool ofApp::runFlagChecks()
             std::optional<argus::FlagEntry> hit = probe.lookup("AB123CD");
             std::optional<argus::FlagEntry> miss = probe.lookup("ZZ999ZZ");
             bool hitOk = hit.has_value() && hit->type == argus::FlagType::Blocked;
-            if (!hitOk || miss.has_value())
+            std::optional<argus::FlagEntry> nearHit = probe.lookupFuzzy("AB123CE");
+            std::optional<argus::FlagEntry> farMiss = probe.lookupFuzzy("ZZ999ZZ");
+            bool fuzzyOk = nearHit.has_value() && nearHit->type == argus::FlagType::Blocked &&
+                           !farMiss.has_value();
+            if (!hitOk || miss.has_value() || !fuzzyOk)
             {
                 reason = "lookup mismatch on fixed cases";
             }

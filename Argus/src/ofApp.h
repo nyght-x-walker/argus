@@ -31,6 +31,7 @@ struct ScanResult
     bool plateValid = false;
     argus::Region region = argus::Region::Unknown;
     std::optional<argus::FlagEntry> match;
+    bool wasRepaired = false;
 };
 
 /// ofApp hosts the single-window UI and the viewport state.
@@ -107,6 +108,16 @@ public:
     /// Runs the full chain on any frame without touching members.
     ScanResult processFrame(const ofImage& frame);
 
+    /// Reads one candidate box into a votable scan result.
+    ScanResult readVoteBox(const ofImage& frame, const argus::PlateCandidate& box);
+
+    /// Votes across top boxes, valid reads winning over raw confidence.
+    ScanResult voteReading(const ofImage& frame,
+                           const std::vector<argus::PlateCandidate>& candidates);
+
+    /// Exact watchlist hit first, one-glyph near miss for shaky reads.
+    void lookupWatchlistMatch(ScanResult& result);
+
     /// Copies a scan result into members, logs it and checks alerts.
     void applyScanResult(const ScanResult& result, const std::string& label);
 
@@ -130,6 +141,9 @@ public:
 
     /// Master switch for ROI preparation applied during setup.
     bool ocrPreprocess = true;
+
+    /// Top confidence-ranked boxes read per frame for voting.
+    int ocrVoteCount = 3;
 
     /// Latest OCR result for the best candidate.
     argus::OcrResult lastOcrResult;

@@ -22,5 +22,29 @@
     "tags": "staff",
     "addedDate": "2023-11-01",
     "triggerAlert": false
+  },
+  {
+    "plate": "SN66XMZ",
+    "type": "Blocked",
+    "reason": "Demo stolen - test vehicle",
+    "tags": "demo,stolen",
+    "addedDate": "2026-09-11",
+    "triggerAlert": true
+  },
+  {
+    "plate": "RR296J",
+    "type": "Suspicious",
+    "reason": "Demo event vehicle",
+    "tags": "demo,surveillance",
+    "addedDate": "2026-09-11",
+    "triggerAlert": true
+  },
+  {
+    "plate": "R104TF",
+    "type": "Authorized",
+    "reason": "Demo staff vehicle",
+    "tags": "demo,staff",
+    "addedDate": "2026-09-11",
+    "triggerAlert": false
   }
 ]

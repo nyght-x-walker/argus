@@ -61,6 +61,59 @@ std::optional<FlagEntry> FlagStore::lookup(const std::string& normalizedPlate) c
     return found->second;
 }
 
+// True when two plates differ by at most one substitution or gap.
+bool withinOneEdit(const std::string& left, const std::string& right)
+{
+    std::size_t i = 0;
+    std::size_t j = 0;
+    bool edited = false;
+    while (i < left.size() && j < right.size())
+    {
+        if (left[i] == right[j])
+        {
+            ++i;
+            ++j;
+            continue;
+        }
+        if (edited)
+        {
+            return false;
+        }
+        edited = true;
+        if (left.size() == right.size())
+        {
+            ++i;
+            ++j;
+        }
+        else if (left.size() > right.size())
+        {
+            ++i;
+        }
+        else
+        {
+            ++j;
+        }
+    }
+    return edited || i < left.size() || j < right.size();
+}
+
+std::optional<FlagEntry> FlagStore::lookupFuzzy(const std::string& normalizedPlate) const
+{
+    if (normalizedPlate.empty())
+    {
+        return std::nullopt;
+    }
+    // Sorted entries keep the winner deterministic on ties.
+    for (const auto& entry : entries())
+    {
+        if (withinOneEdit(normalizedPlate, entry.plate))
+        {
+            return entry;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<FlagEntry> FlagStore::entries() const
 {
     std::vector<FlagEntry> ordered;
