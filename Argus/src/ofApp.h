@@ -17,6 +17,22 @@
 #include <string>
 #include <vector>
 
+/// One pass through detect, read, validate and watchlist lookup.
+/// Shared by still images and video frames alike.
+struct ScanResult
+{
+    std::vector<argus::PlateCandidate> candidates;
+    argus::PlateCandidate bestCandidate;
+    bool hasBest = false;
+    ofImage roiImage;
+    argus::OcrResult ocr;
+    std::string rawPlate;
+    std::string normalizedPlate;
+    bool plateValid = false;
+    argus::Region region = argus::Region::Unknown;
+    std::optional<argus::FlagEntry> match;
+};
+
 /// ofApp hosts the single-window UI and the viewport state.
 class ofApp : public ofBaseApp
 {
@@ -85,8 +101,20 @@ public:
     /// True once a detection run completed this session.
     bool bDetectorRan = false;
 
-    /// Runs detection on the loaded image and logs the outcome.
+    /// Runs the unified pipeline on the loaded image.
     void runDetection();
+
+    /// Runs the full chain on any frame without touching members.
+    ScanResult processFrame(const ofImage& frame);
+
+    /// Copies a scan result into members, logs it and checks alerts.
+    void applyScanResult(const ScanResult& result, const std::string& label);
+
+    /// Extra per-candidate lines in the pipeline log when enabled.
+    bool pipelineDebug = false;
+
+    /// Confidence below which reads and plates count as review material.
+    float ocrReviewConf = 50.0f;
 
     /// Verifies detector behavior on sample and edge inputs.
     bool runDetectorChecks();
@@ -96,6 +124,12 @@ public:
 
     /// Tesseract reader over the cropped best candidate.
     argus::PlateOCR ocr;
+
+    /// Reliability floor applied to the reader during setup.
+    float ocrMinConf = 30.0f;
+
+    /// Master switch for ROI preparation applied during setup.
+    bool ocrPreprocess = true;
 
     /// Latest OCR result for the best candidate.
     argus::OcrResult lastOcrResult;
@@ -112,11 +146,14 @@ public:
     /// Cropped best candidate kept for reading and debugging.
     ofImage plateRoiImg;
 
-    /// Selects the best candidate, crops it and reads the text.
-    void recognizeBestCandidate();
-
     /// Verifies reader behavior on probe and ROI inputs.
     bool runOcrChecks();
+
+    /// Verifies read quality on a fixed known plate crop.
+    bool runOcrQualityChecks();
+
+    /// Verifies the unified pipeline on fixed frame inputs.
+    bool runPipelineChecks();
 
     /// Cleans OCR text and checks the EU generic shape.
     argus::PlateValidator validator;
@@ -136,9 +173,6 @@ public:
     /// True once a validation pass completed this session.
     bool bValidatorRan = false;
 
-    /// Normalizes, validates and logs the latest OCR text.
-    void validatePlateText();
-
     /// Verifies normalizer behavior on fixed cases.
     bool runValidatorChecks();
 
@@ -153,9 +187,6 @@ public:
 
     /// True once a watchlist lookup completed this session.
     bool bFlagRan = false;
-
-    /// Looks up the normalized text and logs the outcome.
-    void lookupFlag();
 
     /// Verifies store load and lookup behavior on fixed cases.
     bool runFlagChecks();
@@ -218,6 +249,21 @@ public:
 
     /// Converts a decision choice to its log label.
     static std::string decisionName(Decision decision);
+
+    /// Logs one line per candidate when pipeline debugging is on.
+    void logCandidateDetails();
+
+    /// Copies validation fields into members and logs the verdict.
+    void logValidationDetails(const ScanResult& result);
+
+    /// Copies the watchlist hit into members and logs the outcome.
+    void logFlagDetails(const ScanResult& result);
+
+    /// Logs the single-line frame summary for images and video.
+    void logPipelineSummary(const ScanResult& result, const std::string& label);
+
+    /// Runs the unified pipeline on the current image as a frame.
+    void handleFrameAction();
 
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;

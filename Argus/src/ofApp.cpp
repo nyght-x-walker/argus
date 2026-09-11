@@ -32,9 +32,6 @@ constexpr float MENU_FPS_MIN_X = 200.0f;
 constexpr float NOTES_INPUT_HEIGHT = 60.0f;
 constexpr float CONSOLE_AUTOSCROLL_MARGIN = 20.0f;
 
-// Low OCR mean threshold on the 0-100 Tesseract scale.
-constexpr float LOW_OCR_CONFIDENCE = 50.0f;
-
 // Overlay box colors for plain and watchlist-matched candidates.
 const ofColor BOX_OK_COLOR(126, 202, 156);
 const ofColor BOX_FLAG_COLOR(224, 108, 91);
@@ -120,6 +117,12 @@ std::string regionName(argus::Region region)
 
 // Pixel size of the synthetic probe image used by the OCR checks.
 constexpr int OCR_PROBE_SIZE = 10;
+
+// Measured plate bounds in the sample image for the quality check.
+constexpr float SAMPLE_PLATE_X = 231.0f;
+constexpr float SAMPLE_PLATE_Y = 191.0f;
+constexpr float SAMPLE_PLATE_W = 108.0f;
+constexpr float SAMPLE_PLATE_H = 31.0f;
 
 // First-run dock proportions: left, right and bottom panels.
 constexpr float DOCK_LEFT_RATIO = 0.20f;
@@ -222,7 +225,10 @@ void ofApp::setup()
     {
         logConsole("PlateOCR engine unavailable", "ERROR");
     }
+    ocr.minConfidence = ocrMinConf;
+    ocr.preprocessEnable = ocrPreprocess;
     runOcrChecks();
+    runOcrQualityChecks();
 
     logConsole("PlateValidator initialized", "INFO");
     runValidatorChecks();
@@ -248,6 +254,7 @@ void ofApp::setup()
     logConsole("[Logger] Will log to resources/logs.jsonl", "INFO");
     runAlertChecks();
     runLoggerChecks();
+    runPipelineChecks();
 }
 
 void ofApp::runDetection()
@@ -260,47 +267,68 @@ void ofApp::runDetection()
     }
 
     logConsole("[PlateDetector] Running detection on img_01.jpg", "INFO");
-    try
-    {
-        candidates = detector.detect(img);
-    }
-    catch (const std::exception& error)
-    {
-        candidates.clear();
-        logConsole(std::string("PlateDetector failed: ") + error.what(), "ERROR");
-        ofLogNotice("PlateDetector") << "failed: " << error.what();
-        return;
-    }
-
-    bDetectorRan = true;
-    recognizeBestCandidate();
-
-    std::string summary = "Found " + ofToString(candidates.size()) + " candidate(s)";
-    logConsole("[PlateDetector] " + summary, candidates.empty() ? "WARNING" : "INFO");
-    ofLogNotice("PlateDetector") << summary;
+    applyScanResult(processFrame(img), "img_01.jpg");
 }
 
-void ofApp::recognizeBestCandidate()
+ScanResult ofApp::processFrame(const ofImage& frame)
 {
-    bHasBest = false;
-    if (candidates.empty() || !img.isAllocated())
+    ScanResult result;
+    if (!frame.isAllocated())
     {
-        return;
+        return result;
     }
-    // Candidates arrive largest first, so the front box is the best.
-    bestCandidate = candidates.front();
-    bHasBest = true;
+    try
+    {
+        result.candidates = detector.detect(frame);
+    }
+    catch (const std::exception&)
+    {
+        result.candidates.clear();
+    }
+    if (result.candidates.empty())
+    {
+        return result;
+    }
+    // Candidates arrive best first, so the front box drives the read.
+    result.bestCandidate = result.candidates.front();
+    result.hasBest = true;
+    float frameWidth = static_cast<float>(frame.getWidth());
+    float frameHeight = static_cast<float>(frame.getHeight());
+    float roiX = ofClamp(result.bestCandidate.rect.x, 0.0f, frameWidth - 1.0f);
+    float roiY = ofClamp(result.bestCandidate.rect.y, 0.0f, frameHeight - 1.0f);
+    float roiW = ofClamp(result.bestCandidate.rect.width, 1.0f, frameWidth - roiX);
+    float roiH = ofClamp(result.bestCandidate.rect.height, 1.0f, frameHeight - roiY);
+    result.roiImage.cropFrom(frame, roiX, roiY, roiW, roiH);
+    result.ocr = ocr.recognize(result.roiImage);
+    result.rawPlate = result.ocr.text;
+    result.normalizedPlate = validator.normalize(result.rawPlate);
+    result.plateValid = validator.isValid(result.normalizedPlate, result.region);
+    if (!result.normalizedPlate.empty())
+    {
+        result.match = flagStore.lookup(result.normalizedPlate);
+    }
+    return result;
+}
 
-    float imageWidth = static_cast<float>(img.getWidth());
-    float imageHeight = static_cast<float>(img.getHeight());
-    float roiX = ofClamp(bestCandidate.rect.x, 0.0f, imageWidth - 1.0f);
-    float roiY = ofClamp(bestCandidate.rect.y, 0.0f, imageHeight - 1.0f);
-    float roiW = ofClamp(bestCandidate.rect.width, 1.0f, imageWidth - roiX);
-    float roiH = ofClamp(bestCandidate.rect.height, 1.0f, imageHeight - roiY);
-    plateRoiImg.cropFrom(img, roiX, roiY, roiW, roiH);
-
-    lastOcrResult = ocr.recognize(plateRoiImg);
+void ofApp::applyScanResult(const ScanResult& result, const std::string& label)
+{
+    bDetectorRan = true;
+    candidates = result.candidates;
+    std::string found = "Found " + ofToString(candidates.size()) + " candidate(s)";
+    logConsole("[PlateDetector] " + found, candidates.empty() ? "WARNING" : "INFO");
+    ofLogNotice("PlateDetector") << found;
+    if (pipelineDebug)
+    {
+        logCandidateDetails();
+    }
+    bHasBest = result.hasBest;
     bOcrRan = true;
+    lastOcrResult = result.ocr;
+    if (result.hasBest)
+    {
+        bestCandidate = result.bestCandidate;
+        plateRoiImg = result.roiImage;
+    }
     if (lastOcrResult.text.empty())
     {
         logConsole("[PlateOCR] empty result", "WARNING");
@@ -310,20 +338,71 @@ void ofApp::recognizeBestCandidate()
     {
         std::string reading = "Recognized: '" + lastOcrResult.text + "' mean " +
                               ofToString(lastOcrResult.meanConf, 1);
-        std::string level = lastOcrResult.meanConf < LOW_OCR_CONFIDENCE ? "WARNING" : "INFO";
+        std::string level = lastOcrResult.meanConf < ocrReviewConf ? "WARNING" : "INFO";
         logConsole("[PlateOCR] " + reading, level);
         ofLogNotice("PlateOCR") << reading;
     }
-    validatePlateText();
-    lookupFlag();
+    logValidationDetails(result);
+    logFlagDetails(result);
+    logPipelineSummary(result, label);
     checkAlert();
 }
 
-void ofApp::validatePlateText()
+bool ofApp::runPipelineChecks()
 {
-    rawPlateText = lastOcrResult.text;
-    normalizedPlateText = validator.normalize(rawPlateText);
-    plateValid = validator.isValid(normalizedPlateText, detectedRegion);
+    std::string reason;
+    ofImage tinyImage;
+    tinyImage.allocate(1, 1, OF_IMAGE_COLOR);
+    ScanResult tinyResult = processFrame(tinyImage);
+    if (!tinyResult.candidates.empty())
+    {
+        reason = "tiny frame returned candidates";
+    }
+    else if (img.isAllocated())
+    {
+        ScanResult sampleResult = processFrame(img);
+        bool countOk = !sampleResult.candidates.empty() && sampleResult.candidates.size() <= 5;
+        bool textOk = sampleResult.ocr.text.size() >= 5 && sampleResult.ocr.text.size() <= 8;
+        if (!countOk || !textOk)
+        {
+            reason = "sample frame result implausible";
+        }
+    }
+    else
+    {
+        reason = "sample image not loaded";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Pipeline checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Pipeline") << "Pipeline checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Pipeline checks: OK", "INFO");
+    ofLogNotice("Pipeline") << "Pipeline checks: OK";
+    return true;
+}
+
+void ofApp::logCandidateDetails()
+{
+    for (const auto& candidate : candidates)
+    {
+        std::string detail =
+            "candidate xywh=" + ofToString(candidate.rect.x, 0) + "," +
+            ofToString(candidate.rect.y, 0) + "," + ofToString(candidate.rect.width, 0) + "," +
+            ofToString(candidate.rect.height, 0) + " conf=" + ofToString(candidate.confidence, 2);
+        logConsole("[Pipeline] " + detail, "INFO");
+    }
+}
+
+void ofApp::logValidationDetails(const ScanResult& result)
+{
+    rawPlateText = result.rawPlate;
+    normalizedPlateText = result.normalizedPlate;
+    plateValid = result.plateValid;
+    detectedRegion = result.region;
     bValidatorRan = true;
     if (normalizedPlateText.empty())
     {
@@ -337,12 +416,47 @@ void ofApp::validatePlateText()
     std::string verdict = std::string("Valid: ") + (plateValid ? "yes" : "no") +
                           " Region: " + regionName(detectedRegion);
     std::string level = "INFO";
-    if (!plateValid && lastOcrResult.meanConf >= LOW_OCR_CONFIDENCE)
+    if (!plateValid && result.ocr.meanConf >= ocrReviewConf)
     {
         level = "WARNING";
     }
     logConsole("[PlateValidator] " + verdict, level);
     ofLogNotice("PlateValidator") << verdict;
+}
+
+void ofApp::logFlagDetails(const ScanResult& result)
+{
+    currentMatch.reset();
+    if (normalizedPlateText.empty())
+    {
+        return;
+    }
+    currentMatch = result.match;
+    bFlagRan = true;
+    std::string outcome = currentMatch.has_value() ? "found" : "not found";
+    logConsole("[FlagStore] Lookup '" + normalizedPlateText + "' -> " + outcome, "INFO");
+    ofLogNotice("FlagStore") << "Lookup '" << normalizedPlateText << "' -> " << outcome;
+    if (!currentMatch.has_value())
+    {
+        return;
+    }
+    const argus::FlagEntry& entry = currentMatch.value();
+    std::string detail =
+        "Type: " + argus::flagTypeToString(entry.type) + ", Reason: " + entry.reason;
+    bool alertWorthy = entry.type != argus::FlagType::Authorized;
+    logConsole("[FlagStore] " + detail, alertWorthy ? "WARNING" : "INFO");
+    ofLogNotice("FlagStore") << detail;
+}
+
+void ofApp::logPipelineSummary(const ScanResult& result, const std::string& label)
+{
+    std::string summary = "[Pipeline] " + label +
+                          ": candidates=" + ofToString(result.candidates.size()) + ", OCR='" +
+                          result.ocr.text + "' conf=" + ofToString(result.ocr.meanConf, 1) +
+                          " valid=" + (result.plateValid ? "Y" : "N") +
+                          " flag=" + (result.match.has_value() ? "Y" : "N");
+    logConsole(summary, "INFO");
+    ofLogNotice("Pipeline") << summary;
 }
 
 bool ofApp::runValidatorChecks()
@@ -377,30 +491,6 @@ bool ofApp::runValidatorChecks()
     logConsole("Validator checks: OK", "INFO");
     ofLogNotice("Validator") << "Validator checks: OK";
     return true;
-}
-
-void ofApp::lookupFlag()
-{
-    currentMatch.reset();
-    if (normalizedPlateText.empty())
-    {
-        return;
-    }
-    currentMatch = flagStore.lookup(normalizedPlateText);
-    bFlagRan = true;
-    std::string outcome = currentMatch.has_value() ? "found" : "not found";
-    logConsole("[FlagStore] Lookup '" + normalizedPlateText + "' -> " + outcome, "INFO");
-    ofLogNotice("FlagStore") << "Lookup '" << normalizedPlateText << "' -> " << outcome;
-    if (!currentMatch.has_value())
-    {
-        return;
-    }
-    const argus::FlagEntry& entry = currentMatch.value();
-    std::string detail =
-        "Type: " + argus::flagTypeToString(entry.type) + ", Reason: " + entry.reason;
-    bool alertWorthy = entry.type != argus::FlagType::Authorized;
-    logConsole("[FlagStore] " + detail, alertWorthy ? "WARNING" : "INFO");
-    ofLogNotice("FlagStore") << detail;
 }
 
 bool ofApp::runFlagChecks()
@@ -631,6 +721,37 @@ bool ofApp::runOcrChecks()
     return true;
 }
 
+bool ofApp::runOcrQualityChecks()
+{
+    std::string reason;
+    if (img.isAllocated())
+    {
+        ofImage plateSample;
+        plateSample.cropFrom(img, SAMPLE_PLATE_X, SAMPLE_PLATE_Y, SAMPLE_PLATE_W, SAMPLE_PLATE_H);
+        argus::OcrResult sampleResult = ocr.recognize(plateSample);
+        bool plausibleLength = sampleResult.text.size() >= 5 && sampleResult.text.size() <= 8;
+        if (!plausibleLength || sampleResult.meanConf < ocrMinConf)
+        {
+            reason = "sample plate read implausible";
+        }
+    }
+    else
+    {
+        reason = "sample image not loaded";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("OCR quality checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("OCR") << "OCR quality checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("OCR quality checks: OK", "INFO");
+    ofLogNotice("OCR") << "OCR quality checks: OK";
+    return true;
+}
+
 bool ofApp::runDetectorChecks()
 {
     std::string reason;
@@ -781,6 +902,17 @@ void ofApp::handleRunAction()
     runDetection();
 }
 
+void ofApp::handleFrameAction()
+{
+    if (!img.isAllocated())
+    {
+        logConsole("No frame loaded", "ERROR");
+        return;
+    }
+    // No video source yet, so the still image stands in as the frame.
+    applyScanResult(processFrame(img), "frame");
+}
+
 void ofApp::drawPipelinePanel()
 {
     if (!showPipeline)
@@ -875,7 +1007,7 @@ void ofApp::drawPipelinePanel()
     }
     if (ImGui::Button("Process Frame"))
     {
-        logConsole("Processing frame f0001, stub", "INFO");
+        handleFrameAction();
     }
     ImGui::SameLine();
     if (ImGui::Button("OCR fail"))
