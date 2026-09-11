@@ -97,6 +97,12 @@ public:
     /// Tesseract reader over the cropped best candidate.
     argus::PlateOCR ocr;
 
+    /// Reliability floor applied to the reader during setup.
+    float ocrMinConf = 30.0f;
+
+    /// Master switch for ROI preparation applied during setup.
+    bool ocrPreprocess = true;
+
     /// Latest OCR result for the best candidate.
     argus::OcrResult lastOcrResult;
 
@@ -117,6 +123,9 @@ public:
 
     /// Verifies reader behavior on probe and ROI inputs.
     bool runOcrChecks();
+
+    /// Verifies read quality on a fixed known plate crop.
+    bool runOcrQualityChecks();
 
     /// Cleans OCR text and checks the EU generic shape.
     argus::PlateValidator validator;

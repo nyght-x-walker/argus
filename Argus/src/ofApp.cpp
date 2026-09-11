@@ -121,6 +121,12 @@ std::string regionName(argus::Region region)
 // Pixel size of the synthetic probe image used by the OCR checks.
 constexpr int OCR_PROBE_SIZE = 10;
 
+// Measured plate bounds in the sample image for the quality check.
+constexpr float SAMPLE_PLATE_X = 231.0f;
+constexpr float SAMPLE_PLATE_Y = 191.0f;
+constexpr float SAMPLE_PLATE_W = 108.0f;
+constexpr float SAMPLE_PLATE_H = 31.0f;
+
 // First-run dock proportions: left, right and bottom panels.
 constexpr float DOCK_LEFT_RATIO = 0.20f;
 constexpr float DOCK_RIGHT_RATIO = 0.28f;
@@ -222,7 +228,10 @@ void ofApp::setup()
     {
         logConsole("PlateOCR engine unavailable", "ERROR");
     }
+    ocr.minConfidence = ocrMinConf;
+    ocr.preprocessEnable = ocrPreprocess;
     runOcrChecks();
+    runOcrQualityChecks();
 
     logConsole("PlateValidator initialized", "INFO");
     runValidatorChecks();
@@ -628,6 +637,37 @@ bool ofApp::runOcrChecks()
     }
     logConsole("OCR checks: OK", "INFO");
     ofLogNotice("OCR") << "OCR checks: OK";
+    return true;
+}
+
+bool ofApp::runOcrQualityChecks()
+{
+    std::string reason;
+    if (img.isAllocated())
+    {
+        ofImage plateSample;
+        plateSample.cropFrom(img, SAMPLE_PLATE_X, SAMPLE_PLATE_Y, SAMPLE_PLATE_W, SAMPLE_PLATE_H);
+        argus::OcrResult sampleResult = ocr.recognize(plateSample);
+        bool plausibleLength = sampleResult.text.size() >= 5 && sampleResult.text.size() <= 8;
+        if (!plausibleLength || sampleResult.meanConf < ocrMinConf)
+        {
+            reason = "sample plate read implausible";
+        }
+    }
+    else
+    {
+        reason = "sample image not loaded";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("OCR quality checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("OCR") << "OCR quality checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("OCR quality checks: OK", "INFO");
+    ofLogNotice("OCR") << "OCR quality checks: OK";
     return true;
 }
 
