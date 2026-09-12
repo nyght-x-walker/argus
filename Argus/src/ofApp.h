@@ -57,6 +57,56 @@ public:
     /// Image loaded from resources/images/car_01.jpg.
     ofImage img;
 
+    /// Active media source driving the viewport and pipeline.
+    enum class MediaKind
+    {
+        None,
+        Image,
+        Video
+    };
+
+    /// Current media kind, empty until the operator loads media.
+    MediaKind mediaKind = MediaKind::None;
+
+    /// Path of the loaded image or video for display and logging.
+    std::string currentMediaPath;
+
+    /// Video decoder behind the viewport in video mode.
+    ofVideoPlayer videoPlayer;
+
+    /// Latest decoded video frame feeding display and pipeline.
+    ofImage frameImage;
+
+    /// Recent normalized reads backing the temporal vote.
+    std::vector<std::string> frameVotes;
+
+    /// Cap keeping the temporal vote window bounded.
+    static constexpr std::size_t MAX_FRAME_VOTES = 9;
+
+    /// Loads an image or video path into the matching backend.
+    bool loadMedia(const std::string& path);
+
+    /// Loads a still image and parks the video decoder.
+    bool loadImageMedia(const std::string& path);
+
+    /// Loads a video file and starts playback.
+    bool loadVideoMedia(const std::string& path);
+
+    /// Opens the native file dialog and loads the chosen media.
+    void browseMedia();
+
+    /// Display pixels, video frame first when one is decoded.
+    const ofImage& displayImage() const;
+
+    /// Copies a fresh decoder frame into the frame image.
+    void readVideoFrame();
+
+    /// Runs the unified pipeline on the current video frame.
+    void processVideoFrame();
+
+    /// Records a read and logs the majority across recent frames.
+    void recordFrameVote(const std::string& normalizedPlate);
+
     /// Visibility toggles for the docked panels.
     bool showImageViewer = true;
     bool showPipeline = true;
@@ -168,6 +218,9 @@ public:
 
     /// Verifies the unified pipeline on fixed frame inputs.
     bool runPipelineChecks();
+
+    /// Verifies media loading and vote tally on fixed inputs.
+    bool runMediaChecks();
 
     /// Cleans OCR text and checks the EU generic shape.
     argus::PlateValidator validator;

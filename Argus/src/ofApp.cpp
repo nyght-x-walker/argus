@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <unordered_map>
 
 #include "imgui_internal.h"
 #include "ofJson.h"
@@ -139,8 +140,73 @@ constexpr char VIEWPORT_WINDOW_TITLE[] = "Viewport — ofApp::draw()";
 constexpr char INSPECTOR_WINDOW_TITLE[] = "Inspector — ofxImGui";
 constexpr char CONSOLE_WINDOW_TITLE[] = "Console — ofLog";
 
-// Sample image
+// Sample image bundled for checks and one-click demo loading.
 constexpr char SAMPLE_IMAGE_PATH[] = "resources/images/car_01.jpg";
+
+// Lowercase extension without the dot, empty when missing.
+std::string mediaExtension(const std::string& path)
+{
+    std::string ext = ofFilePath::getFileExt(path);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext;
+}
+
+// Still images accepted from drops, dialogs and samples.
+bool isImagePath(const std::string& path)
+{
+    std::string ext = mediaExtension(path);
+    return ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "bmp";
+}
+
+// Video containers accepted from drops, dialogs and samples.
+bool isVideoPath(const std::string& path)
+{
+    return mediaExtension(path) == "mp4";
+}
+
+// Majority plate across recent reads, first seen winning ties.
+std::pair<std::string, int> majorityVote(const std::vector<std::string>& reads)
+{
+    std::unordered_map<std::string, int> counts;
+    std::pair<std::string, int> best;
+    for (const auto& read : reads)
+    {
+        int count = ++counts[read];
+        if (count > best.second)
+        {
+            best = {read, count};
+        }
+    }
+    return best;
+}
+
+// Loads the bundled sample into a local image for self-checks.
+bool loadSampleImage(ofImage& sample, std::string& reason)
+{
+    if (sample.load(SAMPLE_IMAGE_PATH))
+    {
+        return true;
+    }
+    reason = "sample image missing";
+    return false;
+}
+
+// True when every candidate sits inside the frame with a valid score.
+bool candidatesAreSane(const std::vector<argus::PlateCandidate>& candidates, int width, int height)
+{
+    for (const auto& candidate : candidates)
+    {
+        bool inside = candidate.rect.x >= 0.0f && candidate.rect.y >= 0.0f &&
+                      candidate.rect.x + candidate.rect.width <= width &&
+                      candidate.rect.y + candidate.rect.height <= height;
+        bool scored = candidate.confidence >= 0.0f && candidate.confidence <= 1.0f;
+        if (!inside || !scored)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 } // namespace
 
@@ -164,10 +230,6 @@ bool ofApp::runStartupChecks()
     else if (consoleLines.empty())
     {
         reason = "console log is empty";
-    }
-    else if (ofFile::doesFileExist(SAMPLE_IMAGE_PATH) && !img.isAllocated())
-    {
-        reason = "image not allocated";
     }
 
     // Mirror the verdict to stdout so headless runs can check it.
@@ -197,18 +259,7 @@ void ofApp::setup()
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     logConsole("Argus OF v0.1.0, student project", "INFO");
-    logConsole("Status: image load and draw", "INFO");
-
-    if (!img.load(SAMPLE_IMAGE_PATH))
-    {
-        logConsole("Failed to load car_01.jpg", "ERROR");
-    }
-    else
-    {
-        logConsole("Loaded car_01.jpg (" + ofToString(img.getWidth()) + "x" +
-                       ofToString(img.getHeight()) + ")",
-                   "INFO");
-    }
+    logConsole("Status: empty viewport, drop media or press O", "INFO");
 
     runStartupChecks();
 
@@ -258,6 +309,7 @@ void ofApp::setup()
     runAlertChecks();
     runLoggerChecks();
     runPipelineChecks();
+    runMediaChecks();
 }
 
 void ofApp::runDetection()
@@ -404,21 +456,22 @@ bool ofApp::runPipelineChecks()
     {
         reason = "tiny frame returned candidates";
     }
-    else if (img.isAllocated())
-    {
-        ScanResult sampleResult = processFrame(img);
-        bool countOk = !sampleResult.candidates.empty() && sampleResult.candidates.size() <= 5;
-        bool textOk = sampleResult.ocr.text.size() >= 5 && sampleResult.ocr.text.size() <= 8;
-        if (!countOk || !textOk)
-        {
-            reason = "sample frame result implausible";
-        }
-        // Report the full chain so headless runs show end-to-end health.
-        logPipelineSummary(sampleResult, "check");
-    }
     else
     {
-        reason = "sample image not loaded";
+        ofImage sample;
+        loadSampleImage(sample, reason);
+        if (reason.empty())
+        {
+            ScanResult sampleResult = processFrame(sample);
+            bool countOk = !sampleResult.candidates.empty() && sampleResult.candidates.size() <= 5;
+            bool textOk = sampleResult.ocr.text.size() >= 5 && sampleResult.ocr.text.size() <= 8;
+            if (!countOk || !textOk)
+            {
+                reason = "sample frame result implausible";
+            }
+            // Report the full chain so headless runs show end-to-end health.
+            logPipelineSummary(sampleResult, "check");
+        }
     }
 
     // Mirror the verdict to stdout so headless runs can check it.
@@ -633,7 +686,7 @@ void ofApp::saveDecisionAndLog()
     operatorNotes = std::string(notesBuffer);
     argus::ScanEvent event;
     event.timestamp = ofGetTimestampString("%Y-%m-%d %H:%M:%S");
-    event.imagePath = SAMPLE_IMAGE_PATH;
+    event.imagePath = currentMediaPath.empty() ? "(none)" : currentMediaPath;
     event.plateRaw = rawPlateText;
     event.plateNorm = normalizedPlateText;
     event.ocrConf = lastOcrResult.meanConf;
@@ -782,20 +835,19 @@ bool ofApp::runOcrChecks()
 bool ofApp::runOcrQualityChecks()
 {
     std::string reason;
-    if (img.isAllocated())
+    ofImage sample;
+    loadSampleImage(sample, reason);
+    if (reason.empty())
     {
         ofImage plateSample;
-        plateSample.cropFrom(img, SAMPLE_PLATE_X, SAMPLE_PLATE_Y, SAMPLE_PLATE_W, SAMPLE_PLATE_H);
+        plateSample.cropFrom(sample, SAMPLE_PLATE_X, SAMPLE_PLATE_Y, SAMPLE_PLATE_W,
+                             SAMPLE_PLATE_H);
         argus::OcrResult sampleResult = ocr.recognize(plateSample);
         bool plausibleLength = sampleResult.text.size() >= 5 && sampleResult.text.size() <= 8;
         if (!plausibleLength || sampleResult.meanConf < ocrMinConf)
         {
             reason = "sample plate read implausible";
         }
-    }
-    else
-    {
-        reason = "sample image not loaded";
     }
 
     // Mirror the verdict to stdout so headless runs can check it.
@@ -823,7 +875,9 @@ bool ofApp::runDetectorChecks()
         ofImage tinyImage;
         tinyImage.allocate(1, 1, OF_IMAGE_COLOR);
         detector.detect(tinyImage);
-        if (img.isAllocated() && detector.detect(img).empty())
+        ofImage sample;
+        loadSampleImage(sample, reason);
+        if (reason.empty() && detector.detect(sample).empty())
         {
             reason = "no candidates on the sample image";
         }
@@ -847,28 +901,21 @@ bool ofApp::runDetectionQualityChecks()
     ofImage tinyImage;
     tinyImage.allocate(10, 10, OF_IMAGE_COLOR);
     std::vector<argus::PlateCandidate> tinyOut = detector.detect(tinyImage);
-    std::vector<argus::PlateCandidate> sampleOut =
-        img.isAllocated() ? detector.detect(img) : tinyOut;
-    if (tinyOut.size() > 5 || sampleOut.empty() || sampleOut.size() > 5)
+    ofImage sample;
+    loadSampleImage(sample, reason);
+    std::vector<argus::PlateCandidate> sampleOut;
+    if (reason.empty())
+    {
+        sampleOut = detector.detect(sample);
+    }
+    if (reason.empty() && (tinyOut.size() > 5 || sampleOut.empty() || sampleOut.size() > 5))
     {
         reason = "candidate count out of range";
     }
-    else
+    else if (reason.empty() && !candidatesAreSane(sampleOut, sample.getWidth(), sample.getHeight()))
     {
-        for (const auto& candidate : sampleOut)
-        {
-            bool inside = candidate.rect.x >= 0.0f && candidate.rect.y >= 0.0f &&
-                          candidate.rect.x + candidate.rect.width <= img.getWidth() &&
-                          candidate.rect.y + candidate.rect.height <= img.getHeight();
-            bool scored = candidate.confidence >= 0.0f && candidate.confidence <= 1.0f;
-            if (!inside || !scored)
-            {
-                reason = "candidate out of bounds or unscored";
-                break;
-            }
-        }
+        reason = "candidate out of bounds or unscored";
     }
-
     // Mirror the verdict to stdout so headless runs can check it.
     if (!reason.empty())
     {
@@ -883,8 +930,11 @@ bool ofApp::runDetectionQualityChecks()
 
 void ofApp::update()
 {
-    // Reserved hook for detection and OCR work.
-    (void)pipelineRunning;
+    if (mediaKind == MediaKind::Video)
+    {
+        videoPlayer.update();
+        readVideoFrame();
+    }
 }
 
 void ofApp::buildDockLayout(ImGuiID dockspaceId, const ImVec2& size)
@@ -957,18 +1007,172 @@ void ofApp::drawMenuBar()
 
 void ofApp::handleRunAction()
 {
+    if (mediaKind == MediaKind::Video)
+    {
+        processVideoFrame();
+        return;
+    }
     runDetection();
 }
 
 void ofApp::handleFrameAction()
 {
+    if (mediaKind == MediaKind::Video)
+    {
+        processVideoFrame();
+        return;
+    }
     if (!img.isAllocated())
     {
         logConsole("No frame loaded", "ERROR");
         return;
     }
-    // No video source yet, so the still image stands in as the frame.
     applyScanResult(processFrame(img), "frame");
+}
+
+bool ofApp::loadMedia(const std::string& path)
+{
+    ofFile file(path);
+    if (!file.exists())
+    {
+        logConsole("Media not found: " + path, "ERROR");
+        ofLogNotice("Media") << "Media not found: " << path;
+        return false;
+    }
+    frameVotes.clear();
+    if (isImagePath(path))
+    {
+        return loadImageMedia(path);
+    }
+    if (isVideoPath(path))
+    {
+        return loadVideoMedia(path);
+    }
+    logConsole("Unsupported media type: " + path, "ERROR");
+    ofLogNotice("Media") << "Unsupported media type: " << path;
+    return false;
+}
+
+bool ofApp::loadImageMedia(const std::string& path)
+{
+    if (!img.load(path))
+    {
+        logConsole("Failed to load image: " + path, "ERROR");
+        ofLogNotice("Media") << "Failed to load image: " << path;
+        return false;
+    }
+    videoPlayer.close();
+    mediaKind = MediaKind::Image;
+    currentMediaPath = path;
+    logConsole("Loaded image: " + path, "INFO");
+    ofLogNotice("Media") << "Loaded image: " << path;
+    return true;
+}
+
+bool ofApp::loadVideoMedia(const std::string& path)
+{
+    if (!videoPlayer.load(path))
+    {
+        logConsole("Failed to load video: " + path, "ERROR");
+        ofLogNotice("Media") << "Failed to load video: " << path;
+        return false;
+    }
+    mediaKind = MediaKind::Video;
+    currentMediaPath = path;
+    videoPlayer.play();
+    logConsole("Loaded video: " + path, "INFO");
+    ofLogNotice("Media") << "Loaded video: " << path;
+    return true;
+}
+
+void ofApp::browseMedia()
+{
+    ofFileDialogResult picked = ofSystemLoadDialog("Load image or video", false, "resources/");
+    if (!picked.bSuccess)
+    {
+        logConsole("Browse cancelled", "INFO");
+        return;
+    }
+    loadMedia(picked.getPath());
+}
+
+const ofImage& ofApp::displayImage() const
+{
+    if (mediaKind == MediaKind::Video && frameImage.isAllocated())
+    {
+        return frameImage;
+    }
+    return img;
+}
+
+void ofApp::readVideoFrame()
+{
+    if (mediaKind != MediaKind::Video || !videoPlayer.isFrameNew())
+    {
+        return;
+    }
+    frameImage.setFromPixels(videoPlayer.getPixels());
+}
+
+void ofApp::processVideoFrame()
+{
+    if (mediaKind != MediaKind::Video || !frameImage.isAllocated())
+    {
+        logConsole("No video frame decoded yet", "ERROR");
+        return;
+    }
+    ScanResult result = processFrame(frameImage);
+    applyScanResult(result, "video");
+    recordFrameVote(result.normalizedPlate);
+}
+
+void ofApp::recordFrameVote(const std::string& normalizedPlate)
+{
+    if (normalizedPlate.empty())
+    {
+        return;
+    }
+    frameVotes.push_back(normalizedPlate);
+    while (frameVotes.size() > MAX_FRAME_VOTES)
+    {
+        frameVotes.erase(frameVotes.begin());
+    }
+    auto tally = majorityVote(frameVotes);
+    std::string vote = "[Pipeline] Temporal vote: '" + tally.first + "' " +
+                       ofToString(tally.second) + "/" + ofToString(frameVotes.size());
+    logConsole(vote, "INFO");
+    ofLogNotice("Pipeline") << vote;
+}
+
+bool ofApp::runMediaChecks()
+{
+    std::string reason;
+    bool extOk = isImagePath("car.JPG") && isVideoPath("clip.mp4") && !isImagePath("clip.mp4") &&
+                 !isVideoPath("car.jpg") && !isImagePath("notes.txt") && !isImagePath("");
+    auto tally = majorityVote({"SN66XMZ", "SNG6XMZ", "SN66XMZ"});
+    auto emptyTally = majorityVote({});
+    auto tieTally = majorityVote({"AB12CD", "XY98ZT"});
+    bool voteOk = tally.first == "SN66XMZ" && tally.second == 2 && emptyTally.second == 0 &&
+                  tieTally.first == "AB12CD" && tieTally.second == 1;
+    if (!extOk || !voteOk)
+    {
+        reason = "extension or tally mismatch";
+    }
+    else if (loadMedia("resources/no_such_file.jpg"))
+    {
+        reason = "missing file loaded";
+    }
+
+    // Mirror the verdict to stdout so headless runs can check it.
+    if (!reason.empty())
+    {
+        logConsole("Media checks: FAILED, " + reason, "ERROR");
+        ofLogNotice("Media") << "Media checks: FAILED, " << reason;
+        return false;
+    }
+    logConsole("Media checks: OK", "INFO");
+    ofLogNotice("Media") << "Media checks: OK";
+    return true;
 }
 
 void ofApp::drawPipelinePanel()
@@ -1059,6 +1263,19 @@ void ofApp::drawPipelinePanel()
         handleRunAction();
     }
     ImGui::SameLine();
+    if (ImGui::Button("Load Media (O)"))
+    {
+        browseMedia();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Sample"))
+    {
+        loadMedia(SAMPLE_IMAGE_PATH);
+    }
+    std::string mediaLabel = currentMediaPath.empty() ? "(none - drop, browse or sample)"
+                                                      : ofFilePath::getFileName(currentMediaPath);
+    ImGui::Text("Media: %s", mediaLabel.c_str());
+    ImGui::SameLine();
     if (ImGui::Button("Batch 10"))
     {
         logConsole("Batch 10, stub", "INFO");
@@ -1084,7 +1301,20 @@ void ofApp::drawViewportToolbar()
     ImGui::Separator();
     if (ImGui::Button("Play"))
     {
-        logConsole("Video play and pause, stub", "INFO");
+        if (mediaKind != MediaKind::Video)
+        {
+            logConsole("No video loaded", "INFO");
+        }
+        else if (videoPlayer.isPlaying())
+        {
+            videoPlayer.setPaused(true);
+            logConsole("Video paused", "INFO");
+        }
+        else
+        {
+            videoPlayer.play();
+            logConsole("Video playing", "INFO");
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Demo Flagged"))
@@ -1113,10 +1343,11 @@ void ofApp::drawViewportPanel()
     }
 
     ImGui::Begin(VIEWPORT_WINDOW_TITLE, &showImageViewer);
-    if (!img.isAllocated())
+    const ofImage& view = displayImage();
+    if (!view.isAllocated())
     {
         bViewportRectValid = false;
-        ImGui::Text("No image loaded");
+        ImGui::Text("Drop an image or video, or press O to browse");
         ImGui::End();
         return;
     }
@@ -1129,8 +1360,8 @@ void ofApp::drawViewportPanel()
     {
         imageAvailH = contentAvail.y;
     }
-    float imageWidth = static_cast<float>(img.getWidth());
-    float imageHeight = static_cast<float>(img.getHeight());
+    float imageWidth = static_cast<float>(view.getWidth());
+    float imageHeight = static_cast<float>(view.getHeight());
     float fitScale = ofMin(contentAvail.x / imageWidth, imageAvailH / imageHeight);
     if (fitScale <= 0.0f)
     {
@@ -1470,14 +1701,15 @@ void ofApp::drawConsolePanel()
 
 void ofApp::drawViewportImage()
 {
-    if (!showImageViewer || !bViewportRectValid || !img.isAllocated())
+    const ofImage& view = displayImage();
+    if (!showImageViewer || !bViewportRectValid || !view.isAllocated())
     {
         return;
     }
 
     ofPushMatrix();
-    img.draw(viewportImageRect.x, viewportImageRect.y, viewportImageRect.width,
-             viewportImageRect.height);
+    view.draw(viewportImageRect.x, viewportImageRect.y, viewportImageRect.width,
+              viewportImageRect.height);
     ofPopMatrix();
 
     ofPushStyle();
@@ -1494,13 +1726,14 @@ void ofApp::drawViewportImage()
 
 void ofApp::drawCandidateOverlays()
 {
-    if (candidates.empty() || !img.isAllocated())
+    const ofImage& view = displayImage();
+    if (candidates.empty() || !view.isAllocated())
     {
         return;
     }
 
-    float scaleX = viewportImageRect.width / static_cast<float>(img.getWidth());
-    float scaleY = viewportImageRect.height / static_cast<float>(img.getHeight());
+    float scaleX = viewportImageRect.width / static_cast<float>(view.getWidth());
+    float scaleY = viewportImageRect.height / static_cast<float>(view.getHeight());
     ofPushStyle();
     ofNoFill();
     for (std::size_t i = 0; i < candidates.size(); ++i)
@@ -1562,6 +1795,10 @@ void ofApp::keyPressed(int key)
     {
         handleRunAction();
     }
+    if (key == 'o' || key == 'O')
+    {
+        browseMedia();
+    }
 }
 
 void ofApp::keyReleased(int key)
@@ -1616,7 +1853,15 @@ void ofApp::windowResized(int w, int h)
 
 void ofApp::dragEvent(ofDragInfo dragInfo)
 {
-    (void)dragInfo;
+    for (const auto& path : dragInfo.files)
+    {
+        // First supported drop wins, matching the mockup drop zone.
+        if (loadMedia(path))
+        {
+            return;
+        }
+    }
+    logConsole("No supported media in drop", "WARNING");
 }
 
 void ofApp::gotMessage(ofMessage msg)
