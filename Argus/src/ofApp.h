@@ -338,6 +338,12 @@ public:
     /// Writes and re-parses one probe event for the self-check.
     bool verifyLoggerRoundTrip(std::string& reason);
 
+    /// Saves one probe entry to a temp file and reads it back.
+    bool checkFlagRoundTrip();
+
+    /// Verifies exact and fuzzy lookups on fixed seed cases.
+    bool checkSeedLookups(argus::FlagStore& probe);
+
     /// Converts a decision choice to its log label.
     static std::string decisionName(Decision decision);
 
@@ -355,6 +361,47 @@ public:
 
     /// Runs the unified pipeline on the current image as a frame.
     void handleFrameAction();
+
+    /// Loads the sample and runs it for a guaranteed flagged demo.
+    void demoFlaggedRun();
+
+    /// Rejects a garbage file through the real load path.
+    void corruptDemoRun();
+
+    /// Sweeps bundled images through detection with a summary.
+    void batchProcessImages();
+
+    /// Runs the pipeline on a blank frame showing failure state.
+    void ocrFailDemoRun();
+
+    /// Releases derived caches and reports what was freed.
+    void purgeCaches();
+
+    /// Toggles video playback, logging when no video is loaded.
+    void toggleVideoPlay();
+
+    /// Seeks the loaded video by a signed second offset.
+    void seekVideo(float seconds);
+
+    /// Flag editor input capacities.
+    static constexpr std::size_t FLAG_PLATE_SIZE = 32;
+    static constexpr std::size_t FLAG_REASON_SIZE = 256;
+
+    /// Flag editor modal visibility.
+    bool showFlagModal = false;
+
+    /// Flag editor plate and reason inputs.
+    char flagPlateBuffer[FLAG_PLATE_SIZE];
+    char flagReasonBuffer[FLAG_REASON_SIZE];
+
+    /// Flag editor selected severity index.
+    int flagTypeIndex = 0;
+
+    /// Draws the add/edit flagged modal with live validation.
+    void drawFlagModal();
+
+    /// Stores the modal inputs into the watchlist file.
+    void saveFlagEntry();
 
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
@@ -381,14 +428,19 @@ private:
     /// Draws the top menu bar with the frame rate chip.
     void drawMenuBar();
 
-    /// Draws the left pipeline panel with stub controls.
+    /// Draws the left pipeline panel with run controls.
     void drawPipelinePanel();
-
     /// Draws the center viewport panel and captures its image rect.
     void drawViewportPanel();
 
-    /// Draws the viewport toolbar row with stub buttons.
+    /// Draws the viewport toolbar row with transport buttons.
     void drawViewportToolbar();
+
+    /// Draws seek position with frame and memory chips.
+    void drawTransportStatus();
+
+    /// Reserves aspect-fit space and captures the image rect.
+    void measureViewportRect(const ofImage& view);
 
     /// Draws the right inspector panel with collapsible sections.
     void drawInspectorPanel();
@@ -417,11 +469,21 @@ private:
     /// Draws one scan event row with severity highlighting.
     void drawLogsRow(const argus::ScanEvent& event);
 
+    /// Draws real memory usage with a working clear button.
+    void drawMemoryTab();
+
     /// Draws the loaded image into the captured viewport rect.
     void drawViewportImage();
 
     /// Draws candidate boxes mapped from image to viewport coordinates.
     void drawCandidateOverlays();
+
+    /// Reads one box label text with its blocked flag.
+    void readBoxLabel(std::size_t index, std::string& text, bool& flagged);
+
+    /// Draws one candidate box with labels at viewport scale.
+    void drawCandidateBox(std::size_t index, const argus::PlateCandidate& candidate, float scaleX,
+                          float scaleY);
 
     /// Draws per-character confidence chips in the inspector.
     void drawOcrChips();

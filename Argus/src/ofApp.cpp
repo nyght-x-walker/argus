@@ -160,6 +160,34 @@ std::string mediaExtension(const std::string& path)
     return ext;
 }
 
+// Decoded megabytes of an image for the memory readouts.
+double imageMegaBytes(const ofImage& image)
+{
+    if (!image.isAllocated())
+    {
+        return 0.0;
+    }
+    return static_cast<double>(image.getWidth()) * image.getHeight() *
+           image.getPixels().getNumChannels() / (1024.0 * 1024.0);
+}
+
+// Resident process megabytes from the OS, zero when unavailable.
+std::size_t processResidentMB()
+{
+#ifdef __linux__
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line))
+    {
+        if (line.rfind("VmRSS:", 0) == 0)
+        {
+            return static_cast<std::size_t>(std::stoul(line.substr(6)) / 1024);
+        }
+    }
+#endif
+    return 0;
+}
+
 // Still images accepted from drops, dialogs and samples.
 bool isImagePath(const std::string& path)
 {
@@ -320,6 +348,8 @@ void ofApp::setup()
     ofSetFrameRate(60);
 
     std::memset(notesBuffer, 0, sizeof(notesBuffer));
+    std::memset(flagPlateBuffer, 0, sizeof(flagPlateBuffer));
+    std::memset(flagReasonBuffer, 0, sizeof(flagReasonBuffer));
     bViewportRectValid = false;
     bDockLayoutBuilt = false;
 
@@ -710,14 +740,7 @@ bool ofApp::runFlagChecks()
         }
         else
         {
-            std::optional<argus::FlagEntry> hit = probe.lookup("AB123CD");
-            std::optional<argus::FlagEntry> miss = probe.lookup("ZZ999ZZ");
-            bool hitOk = hit.has_value() && hit->type == argus::FlagType::Blocked;
-            std::optional<argus::FlagEntry> nearHit = probe.lookupFuzzy("AB123CE");
-            std::optional<argus::FlagEntry> farMiss = probe.lookupFuzzy("ZZ999ZZ");
-            bool fuzzyOk = nearHit.has_value() && nearHit->type == argus::FlagType::Blocked &&
-                           !farMiss.has_value();
-            if (!hitOk || miss.has_value() || !fuzzyOk)
+            if (!checkSeedLookups(probe))
             {
                 reason = "lookup mismatch on fixed cases";
             }
@@ -738,6 +761,37 @@ bool ofApp::runFlagChecks()
     logConsole("Flag checks: OK", "INFO");
     ofLogNotice("Flag") << "Flag checks: OK";
     return true;
+}
+
+bool ofApp::checkSeedLookups(argus::FlagStore& probe)
+{
+    std::optional<argus::FlagEntry> hit = probe.lookup("AB123CD");
+    std::optional<argus::FlagEntry> miss = probe.lookup("ZZ999ZZ");
+    bool hitOk = hit.has_value() && hit->type == argus::FlagType::Blocked;
+    std::optional<argus::FlagEntry> nearHit = probe.lookupFuzzy("AB123CE");
+    std::optional<argus::FlagEntry> farMiss = probe.lookupFuzzy("ZZ999ZZ");
+    bool fuzzyOk =
+        nearHit.has_value() && nearHit->type == argus::FlagType::Blocked && !farMiss.has_value();
+    return hitOk && !miss.has_value() && fuzzyOk && checkFlagRoundTrip();
+}
+
+// Saves one probe entry to a temp file and reads it back.
+bool ofApp::checkFlagRoundTrip()
+{
+    std::string staging = ofToDataPath("flag_roundtrip_tmp.json", true);
+    argus::FlagStore probe;
+    argus::FlagEntry entry;
+    entry.plate = "ZZ00TMP";
+    entry.type = argus::FlagType::Suspicious;
+    entry.reason = "round trip probe";
+    probe.add(entry);
+    bool roundOk = probe.save(staging);
+    argus::FlagStore reloaded;
+    roundOk = roundOk && reloaded.load(staging);
+    std::optional<argus::FlagEntry> hit = reloaded.lookup("ZZ00TMP");
+    roundOk = roundOk && hit.has_value() && hit->reason == "round trip probe";
+    std::remove(staging.c_str());
+    return roundOk;
 }
 
 std::string ofApp::decisionName(Decision decision)
@@ -1232,6 +1286,102 @@ void ofApp::handleFrameAction()
     applyScanResult(processFrame(img), "frame");
 }
 
+void ofApp::demoFlaggedRun()
+{
+    // The bundled sample reads near seeded SN66XMZ, firing the real path.
+    if (!loadMedia(SAMPLE_IMAGE_PATH))
+    {
+        return;
+    }
+    if (!autoProcess)
+    {
+        runDetection();
+    }
+}
+
+void ofApp::corruptDemoRun()
+{
+    // Garbage bytes must fail the same validation real drops face.
+    std::string staging = ofToDataPath("corrupt_demo_tmp.jpg", true);
+    ofFile trash(staging, ofFile::WriteOnly);
+    const char garbage[] = "not an image at all, bogus marker";
+    trash.write(garbage, sizeof(garbage));
+    trash.close();
+    bool loaded = loadMedia(staging);
+    std::remove(staging.c_str());
+    if (!loaded)
+    {
+        logConsole("Corrupt demo rejected as expected", "INFO");
+    }
+}
+
+void ofApp::batchProcessImages()
+{
+    ofDirectory imagesDir("resources/images");
+    imagesDir.allowExt("jpg");
+    imagesDir.listDir();
+    std::size_t totalCandidates = 0;
+    int processed = 0;
+    int limit = std::min<int>(10, static_cast<int>(imagesDir.size()));
+    for (int file = 0; file < limit; ++file)
+    {
+        ofImage batchImage;
+        if (!batchImage.load(imagesDir.getPath(file)))
+        {
+            logConsole("Batch skip unreadable: " + imagesDir.getName(file), "WARNING");
+            continue;
+        }
+        std::vector<argus::PlateCandidate> found;
+        try
+        {
+            found = detector.detect(batchImage);
+        }
+        catch (const std::exception&)
+        {
+            found.clear();
+        }
+        totalCandidates += found.size();
+        ++processed;
+        logConsole("[Batch] " + imagesDir.getName(file) + ": " + ofToString(found.size()) +
+                       " candidate(s)",
+                   "INFO");
+    }
+    std::string done = "[Batch] Done " + ofToString(processed) + " file(s), " +
+                       ofToString(totalCandidates) + " candidate(s)";
+    logConsole(done, "INFO");
+    ofLogNotice("Batch") << done;
+}
+
+void ofApp::ocrFailDemoRun()
+{
+    // Uniform frames carry no edges, exercising the genuine empty path.
+    ofImage blank;
+    blank.allocate(24, 24, OF_IMAGE_GRAYSCALE);
+    for (int y = 0; y < blank.getHeight(); ++y)
+    {
+        for (int x = 0; x < blank.getWidth(); ++x)
+        {
+            blank.setColor(x, y, ofColor(128));
+        }
+    }
+    blank.update();
+    applyScanResult(processFrame(blank), "ocr-fail");
+}
+
+void ofApp::purgeCaches()
+{
+    std::size_t freed =
+        candidates.size() + plateReads.size() + frameVotes.size() + frameTracks.size();
+    candidates.clear();
+    plateReads.clear();
+    frameVotes.clear();
+    frameTracks.clear();
+    selectedPlate = 0;
+    std::string done = "Purged " + ofToString(freed) + " cached entries";
+    logConsole(done, "INFO");
+    ofLogNotice("Cache") << done;
+}
+
 bool ofApp::loadMedia(const std::string& path)
 {
     ofFile file(path);
@@ -1509,7 +1659,7 @@ void ofApp::drawPipelinePanel()
     ImGui::SameLine();
     if (ImGui::Button("Batch 10"))
     {
-        logConsole("Batch 10, stub", "INFO");
+        batchProcessImages();
     }
     if (ImGui::Button("Process Frame"))
     {
@@ -1518,7 +1668,7 @@ void ofApp::drawPipelinePanel()
     ImGui::SameLine();
     if (ImGui::Button("OCR fail"))
     {
-        logConsole("Simulated OCR failure, stub", "WARNING");
+        ocrFailDemoRun();
     }
 
     ImGui::Separator();
@@ -1527,42 +1677,80 @@ void ofApp::drawPipelinePanel()
     ImGui::End();
 }
 
+void ofApp::toggleVideoPlay()
+{
+    if (mediaKind != MediaKind::Video)
+    {
+        logConsole("No video loaded", "INFO");
+    }
+    else if (videoPlayer.isPlaying())
+    {
+        videoPlayer.setPaused(true);
+        logConsole("Video paused", "INFO");
+    }
+    else
+    {
+        videoPlayer.play();
+        logConsole("Video playing", "INFO");
+    }
+}
+
+void ofApp::seekVideo(float seconds)
+{
+    if (mediaKind != MediaKind::Video || videoPlayer.getDuration() <= 0.0f)
+    {
+        return;
+    }
+    float position = videoPlayer.getPosition() + seconds / videoPlayer.getDuration();
+    videoPlayer.setPosition(ofClamp(position, 0.0f, 1.0f));
+}
+
 void ofApp::drawViewportToolbar()
 {
     ImGui::Separator();
     if (ImGui::Button("Play"))
     {
-        if (mediaKind != MediaKind::Video)
-        {
-            logConsole("No video loaded", "INFO");
-        }
-        else if (videoPlayer.isPlaying())
-        {
-            videoPlayer.setPaused(true);
-            logConsole("Video paused", "INFO");
-        }
-        else
-        {
-            videoPlayer.play();
-            logConsole("Video playing", "INFO");
-        }
+        toggleVideoPlay();
     }
     ImGui::SameLine();
     if (ImGui::Button("Demo Flagged"))
     {
-        logConsole("Demo flagged plate, stub", "WARNING");
+        demoFlaggedRun();
     }
     ImGui::SameLine();
     if (ImGui::Button("Corrupt img"))
     {
-        logConsole("Corrupt image rejected, stub", "ERROR");
+        corruptDemoRun();
     }
     ImGui::SameLine();
     ImGui::Checkbox("Show candidates", &showCandidates);
     ImGui::SameLine();
-    ImGui::Text("f0001 · 00:00:00");
-    ImGui::Text("mat 11.8 MB · 342 MB");
+    drawTransportStatus();
     ImGui::TextDisabled("Space play · seek · R re-run");
+}
+
+void ofApp::drawTransportStatus()
+{
+    if (mediaKind == MediaKind::Video)
+    {
+        int seekPos = static_cast<int>(videoPlayer.getPosition() * 100.0f);
+        if (ImGui::SliderInt("Seek", &seekPos, 0, 100))
+        {
+            videoPlayer.setPosition(seekPos / 100.0f);
+        }
+        ImGui::SameLine();
+        int totalSeconds = static_cast<int>(videoPlayer.getPosition() * videoPlayer.getDuration());
+        ImGui::Text("f%04d · %02d:%02d", videoPlayer.getCurrentFrame(), totalSeconds / 60,
+                    totalSeconds % 60);
+    }
+    else
+    {
+        const ofImage& view = displayImage();
+        ImGui::Text("%dx%d", view.isAllocated() ? view.getWidth() : 0,
+                    view.isAllocated() ? view.getHeight() : 0);
+    }
+    ImGui::SameLine();
+    ImGui::Text("%.1f MB", imageMegaBytes(displayImage()));
 }
 
 void ofApp::drawViewportPanel()
@@ -1584,6 +1772,15 @@ void ofApp::drawViewportPanel()
     }
 
     // Reserve layout space, then draw the pixels with OF after gui.end().
+    measureViewportRect(view);
+
+    drawAlertBanner();
+    drawViewportToolbar();
+    ImGui::End();
+}
+
+void ofApp::measureViewportRect(const ofImage& view)
+{
     ImVec2 cursorPos = ImGui::GetCursorScreenPos();
     ImVec2 contentAvail = ImGui::GetContentRegionAvail();
     float imageAvailH = contentAvail.y - VIEWPORT_TOOLBAR_HEIGHT;
@@ -1605,10 +1802,6 @@ void ofApp::drawViewportPanel()
     viewportImageRect.set(imageX, imageY, drawWidth, drawHeight);
     bViewportRectValid = true;
     ImGui::Dummy(ImVec2(contentAvail.x, imageAvailH));
-
-    drawAlertBanner();
-    drawViewportToolbar();
-    ImGui::End();
 }
 
 void ofApp::drawAlertBanner()
@@ -1762,17 +1955,79 @@ void ofApp::drawInspectorPanel()
         ImGui::Text("Video cache: 0 MB");
         if (ImGui::Button("Purge caches"))
         {
-            logConsole("Purge caches, stub", "INFO");
+            purgeCaches();
         }
     }
     if (ImGui::CollapsingHeader("Flag editor"))
     {
         if (ImGui::Button("Add and Edit flagged"))
         {
-            logConsole("Flag editor opened, stub", "INFO");
+            showFlagModal = true;
         }
     }
     ImGui::End();
+}
+
+void ofApp::drawFlagModal()
+{
+    if (showFlagModal)
+    {
+        ImGui::OpenPopup("Add / Edit flagged");
+        showFlagModal = false;
+    }
+    if (!ImGui::BeginPopupModal("Add / Edit flagged", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+    ImGui::InputText("PLATE", flagPlateBuffer, sizeof(flagPlateBuffer));
+    std::string preview = validator.normalize(flagPlateBuffer);
+    argus::Region previewRegion = argus::Region::Unknown;
+    bool previewValid = validator.isValid(preview, previewRegion);
+    ImGui::Text("Normalized: %s %s", preview.empty() ? "-" : preview.c_str(),
+                previewValid ? "valid [EU]" : "invalid");
+    const char* severities[] = {"Blocked", "Suspicious", "Authorized"};
+    ImGui::Combo("TYPE", &flagTypeIndex, severities, 3);
+    ImGui::InputText("REASON", flagReasonBuffer, sizeof(flagReasonBuffer));
+    if (ImGui::Button("Save"))
+    {
+        saveFlagEntry();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel"))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void ofApp::saveFlagEntry()
+{
+    std::string plate = validator.normalize(flagPlateBuffer);
+    if (plate.empty())
+    {
+        logConsole("Flag plate empty, not saved", "ERROR");
+        return;
+    }
+    argus::FlagEntry entry;
+    entry.plate = plate;
+    entry.type = flagTypeIndex == 0 ? argus::FlagType::Blocked
+                                    : (flagTypeIndex == 1 ? argus::FlagType::Suspicious
+                                                          : argus::FlagType::Authorized);
+    entry.reason = flagReasonBuffer;
+    entry.addedDate = ofGetTimestampString("%Y-%m-%d");
+    entry.triggerAlert = entry.type != argus::FlagType::Authorized;
+    flagStore.add(entry);
+    if (!flagStore.save(flaggedJsonPath))
+    {
+        logConsole("Failed to save flagged.json", "ERROR");
+        return;
+    }
+    std::string saved = "[FlagStore] Saved flagged " + plate;
+    logConsole(saved, "INFO");
+    ofLogNotice("FlagStore") << saved;
+    std::memset(flagPlateBuffer, 0, sizeof(flagPlateBuffer));
+    std::memset(flagReasonBuffer, 0, sizeof(flagReasonBuffer));
 }
 
 void ofApp::drawConsoleTab()
@@ -1936,7 +2191,7 @@ void ofApp::drawConsolePanel()
         }
         if (ImGui::BeginTabItem("Memory"))
         {
-            ImGui::Text("Not implemented yet.");
+            drawMemoryTab();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -1983,51 +2238,62 @@ void ofApp::drawCandidateOverlays()
     ofNoFill();
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
-        const argus::PlateCandidate& candidate = candidates[i];
-        float boxX = viewportImageRect.x + candidate.rect.x * scaleX;
-        float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
-        float boxW = candidate.rect.width * scaleX;
-        float boxH = candidate.rect.height * scaleY;
-        std::string boxText;
-        bool boxFlagged = false;
-        for (const auto& read : plateReads)
-        {
-            if (read.candidateIndex != static_cast<int>(i))
-            {
-                continue;
-            }
-            boxText = read.ocr.text;
-            boxFlagged = read.match.has_value() && read.match->type == argus::FlagType::Blocked;
-        }
-        bool flagged = boxFlagged || (bHasBest && i == 0 && currentMatch.has_value());
-        ofSetColor(flagged ? BOX_FLAG_COLOR : BOX_OK_COLOR);
-        ofDrawRectangle(boxX, boxY, boxW, boxH);
-        ofSetColor(255, 255, 255);
-        int percent = static_cast<int>(candidate.confidence * 100.0f);
-        std::string label = ofToString(percent) + "%";
-        if (!boxText.empty())
-        {
-            label = boxText + " " + label;
-        }
-        else if (bHasBest && i == 0 && !lastOcrResult.text.empty())
-        {
-            label = lastOcrResult.text + " " + label;
-        }
-        ofDrawBitmapStringHighlight(label, boxX, boxY - 8.0f);
-        if (flagged)
-        {
-            ofDrawBitmapString("FLAGGED", boxX, boxY + boxH + FLAG_LABEL_OFFSET_Y);
-        }
-        if (bHasBest && i == 0 && !normalizedPlateText.empty() &&
-            normalizedPlateText != lastOcrResult.text)
-        {
-            std::string normLabel = normalizedPlateText + (plateValid ? " OK" : " ??");
-            ofDrawBitmapString(normLabel, boxX, boxY - 24.0f);
-        }
+        drawCandidateBox(i, candidates[i], scaleX, scaleY);
     }
     ofPopStyle();
 }
 
+void ofApp::readBoxLabel(std::size_t index, std::string& text, bool& flagged)
+{
+    text.clear();
+    flagged = false;
+    for (const auto& read : plateReads)
+    {
+        if (read.candidateIndex != static_cast<int>(index))
+        {
+            continue;
+        }
+        text = read.ocr.text;
+        flagged = read.match.has_value() && read.match->type == argus::FlagType::Blocked;
+    }
+}
+
+void ofApp::drawCandidateBox(std::size_t index, const argus::PlateCandidate& candidate,
+                             float scaleX, float scaleY)
+{
+    float boxX = viewportImageRect.x + candidate.rect.x * scaleX;
+    float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
+    float boxW = candidate.rect.width * scaleX;
+    float boxH = candidate.rect.height * scaleY;
+    std::string boxText;
+    bool boxFlagged = false;
+    readBoxLabel(index, boxText, boxFlagged);
+    bool flagged = boxFlagged || (bHasBest && index == 0 && currentMatch.has_value());
+    ofSetColor(flagged ? BOX_FLAG_COLOR : BOX_OK_COLOR);
+    ofDrawRectangle(boxX, boxY, boxW, boxH);
+    ofSetColor(255, 255, 255);
+    int percent = static_cast<int>(candidate.confidence * 100.0f);
+    std::string label = ofToString(percent) + "%";
+    if (!boxText.empty())
+    {
+        label = boxText + " " + label;
+    }
+    else if (bHasBest && index == 0 && !lastOcrResult.text.empty())
+    {
+        label = lastOcrResult.text + " " + label;
+    }
+    ofDrawBitmapStringHighlight(label, boxX, boxY - 8.0f);
+    if (flagged)
+    {
+        ofDrawBitmapString("FLAGGED", boxX, boxY + boxH + FLAG_LABEL_OFFSET_Y);
+    }
+    if (bHasBest && index == 0 && !normalizedPlateText.empty() &&
+        normalizedPlateText != lastOcrResult.text)
+    {
+        std::string normLabel = normalizedPlateText + (plateValid ? " OK" : " ??");
+        ofDrawBitmapString(normLabel, boxX, boxY - 24.0f);
+    }
+}
 void ofApp::draw()
 {
     ofBackground(30, 30, 40);
@@ -2039,6 +2305,7 @@ void ofApp::draw()
     drawViewportPanel();
     drawInspectorPanel();
     drawConsolePanel();
+    drawFlagModal();
     gui.end();
 
     drawViewportImage();
@@ -2049,8 +2316,30 @@ void ofApp::exit()
     ofLog() << "ofApp::exit() called";
 }
 
+void ofApp::drawMemoryTab()
+{
+    std::size_t resident = processResidentMB();
+    ImGui::Text("Process RSS: %s", resident > 0 ? ofToString(resident).c_str() : "n/a");
+    ImGui::Text("Image: %.1f MB", imageMegaBytes(img));
+    ImGui::Text("Video frame: %.1f MB", imageMegaBytes(frameImage));
+    ImGui::Text("ROI: %.1f MB", imageMegaBytes(plateRoiImg));
+    ImGui::Text("Candidates: %d  Reads: %d  Votes: %d  Tracks: %d  Logs: %d",
+                static_cast<int>(candidates.size()), static_cast<int>(plateReads.size()),
+                static_cast<int>(frameVotes.size()), static_cast<int>(frameTracks.size()),
+                static_cast<int>(logger.recentEvents.size()));
+    if (ImGui::Button("Clear caches"))
+    {
+        purgeCaches();
+    }
+}
+
 void ofApp::keyPressed(int key)
 {
+    // Typing in notes or modal inputs must not fire shortcuts.
+    if (ImGui::GetIO().WantTextInput)
+    {
+        return;
+    }
     if (key == 'r' || key == 'R')
     {
         handleRunAction();
@@ -2066,6 +2355,22 @@ void ofApp::keyPressed(int key)
     if (key == ']')
     {
         selectPlate(selectedPlate + 1);
+    }
+    if (key == ' ')
+    {
+        toggleVideoPlay();
+    }
+    if (key == OF_KEY_LEFT)
+    {
+        seekVideo(-5.0f);
+    }
+    if (key == OF_KEY_RIGHT)
+    {
+        seekVideo(5.0f);
+    }
+    if (key == OF_KEY_RETURN)
+    {
+        saveDecisionAndLog();
     }
 }
 
