@@ -32,6 +32,7 @@ struct ScanResult
     argus::Region region = argus::Region::Unknown;
     std::optional<argus::FlagEntry> match;
     bool wasRepaired = false;
+    int candidateIndex = -1;
 };
 
 /// ofApp hosts the single-window UI and the viewport state.
@@ -156,20 +157,25 @@ public:
     void runDetection();
 
     /// Runs the full chain on any frame without touching members.
-    ScanResult processFrame(const ofImage& frame);
+    std::vector<ScanResult> processFrame(const ofImage& frame);
 
-    /// Reads one candidate box into a votable scan result.
+    /// Reads one candidate box into a single scan result.
     ScanResult readVoteBox(const ofImage& frame, const argus::PlateCandidate& box);
-
-    /// Votes across top boxes, valid reads winning over raw confidence.
-    ScanResult voteReading(const ofImage& frame,
-                           const std::vector<argus::PlateCandidate>& candidates);
 
     /// Exact watchlist hit first, one-glyph near miss for shaky reads.
     void lookupWatchlistMatch(ScanResult& result);
 
-    /// Copies a scan result into members, logs it and checks alerts.
-    void applyScanResult(const ScanResult& result, const std::string& label);
+    /// Copies scan results into members, logs them and checks alerts.
+    void applyScanResult(const std::vector<ScanResult>& reads, const std::string& label);
+
+    /// Shows one plate read in the inspector and log selection.
+    void selectPlate(int index);
+
+    /// Clears display members and reports a plateless run.
+    void clearEmptyResults(const std::string& label);
+
+    /// Runs the unified pipeline on the current live video frame.
+    void processLiveFrame();
 
     /// Extra per-candidate lines in the pipeline log when enabled.
     bool pipelineDebug = false;
@@ -192,8 +198,26 @@ public:
     /// Master switch for ROI preparation applied during setup.
     bool ocrPreprocess = true;
 
-    /// Top confidence-ranked boxes read per frame for voting.
-    int ocrVoteCount = 3;
+    /// Top confidence-ranked boxes read per frame.
+    int maxPlateReads = 4;
+
+    /// All plate reads from the latest run, valid first.
+    std::vector<ScanResult> plateReads;
+
+    /// Index into plateReads shown in the inspector.
+    int selectedPlate = 0;
+
+    /// Automatic pipeline runs on loads and sampled video frames.
+    bool autoProcess = true;
+
+    /// Decoded frames between live automatic runs.
+    int liveSampleStep = 45;
+
+    /// Decoded video frames seen, driving live sampling.
+    int liveFrameCount = 0;
+
+    /// First decoded frame still awaiting its automatic run.
+    bool videoFirstPending = false;
 
     /// Latest OCR result for the best candidate.
     argus::OcrResult lastOcrResult;
@@ -327,7 +351,7 @@ public:
     void logFlagDetails(const ScanResult& result);
 
     /// Logs the single-line frame summary for images and video.
-    void logPipelineSummary(const ScanResult& result, const std::string& label);
+    void logPipelineSummary(const std::vector<ScanResult>& reads, const std::string& label);
 
     /// Runs the unified pipeline on the current image as a frame.
     void handleFrameAction();
@@ -404,4 +428,27 @@ private:
 
     /// Shared stub behind the Run button and the R key.
     void handleRunAction();
+
+    /// One tracked plate across sampled video frames.
+    struct FrameTrack
+    {
+        ofRectangle rect;
+        std::vector<std::string> votes;
+        int missed = 0;
+    };
+
+    /// Live plate tracks matched by overlap between samples.
+    std::vector<FrameTrack> frameTracks;
+
+    /// Matches reads to tracks and drops stale ones.
+    void updateFrameTracks(const std::vector<ScanResult>& reads);
+
+    /// Best track overlapping a box, past-the-end when none.
+    std::size_t matchTrack(const ofRectangle& box);
+
+    /// Drops tracks unseen for longer than the miss limit.
+    void sweepStaleTracks(const std::vector<bool>& hit);
+
+    /// Verifies overlap matching on fixed synthetic tracks.
+    bool checkTrackMatching();
 };

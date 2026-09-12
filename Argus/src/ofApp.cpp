@@ -49,6 +49,15 @@ constexpr int LOG_TABLE_COLUMNS = 7;
 // Mean confidence below which a near-miss watchlist hit still counts.
 constexpr float FUZZY_MAX_CONF = 85.0f;
 
+// Live plate tracks kept across sampled frames.
+constexpr std::size_t MAX_FRAME_TRACKS = 8;
+
+// Samples without a match before a track is dropped.
+constexpr int TRACK_MISSED_LIMIT = 3;
+
+// Overlap share treating two boxes as the same plate.
+constexpr float TRACK_OVERLAP = 0.35f;
+
 // Startup offset so the first alert can fire immediately.
 constexpr int ALERT_INIT_OFFSET_MINUTES = 10;
 
@@ -178,6 +187,65 @@ std::pair<std::string, int> majorityVote(const std::vector<std::string>& reads)
         }
     }
     return best;
+}
+
+// Rank with plausible-length valid reads first for selection.
+float rankReading(const ScanResult& read)
+{
+    float base = 0.0f;
+    if (read.plateValid)
+    {
+        bool plausible = read.normalizedPlate.size() >= 5 && read.normalizedPlate.size() <= 8;
+        base = plausible ? 2000.0f : 1000.0f;
+    }
+    return base + read.ocr.meanConf;
+}
+
+// Alert rank with Blocked first and misses last.
+int matchPriority(const std::optional<argus::FlagEntry>& match)
+{
+    if (!match.has_value())
+    {
+        return 3;
+    }
+    if (match->type == argus::FlagType::Blocked)
+    {
+        return 0;
+    }
+    if (match->type == argus::FlagType::Suspicious)
+    {
+        return 1;
+    }
+    return 2;
+}
+
+// Strongest watchlist hit across reads for the alert path.
+std::optional<argus::FlagEntry> strongestMatch(const std::vector<ScanResult>& reads)
+{
+    std::optional<argus::FlagEntry> best;
+    for (const auto& read : reads)
+    {
+        if (matchPriority(read.match) < matchPriority(best))
+        {
+            best = read.match;
+        }
+    }
+    return best;
+}
+
+// Intersection share of the smaller box for track matching.
+double rectOverlap(const ofRectangle& first, const ofRectangle& second)
+{
+    float interWidth =
+        std::min(first.x + first.width, second.x + second.width) - std::max(first.x, second.x);
+    float interHeight =
+        std::min(first.y + first.height, second.y + second.height) - std::max(first.y, second.y);
+    if (interWidth <= 0.0f || interHeight <= 0.0f)
+    {
+        return 0.0;
+    }
+    double smaller = std::min<double>(first.getArea(), second.getArea());
+    return smaller > 0.0 ? interWidth * interHeight / smaller : 0.0;
 }
 
 // Loads the bundled sample into a local image for self-checks.
@@ -325,51 +393,39 @@ void ofApp::runDetection()
     applyScanResult(processFrame(img), "img_01.jpg");
 }
 
-ScanResult ofApp::processFrame(const ofImage& frame)
+std::vector<ScanResult> ofApp::processFrame(const ofImage& frame)
 {
-    ScanResult result;
+    std::vector<ScanResult> reads;
     if (!frame.isAllocated())
     {
-        return result;
+        return reads;
     }
+    std::vector<argus::PlateCandidate> found;
     try
     {
-        result.candidates = detector.detect(frame);
+        found = detector.detect(frame);
     }
     catch (const std::exception&)
     {
-        result.candidates.clear();
+        found.clear();
     }
-    if (result.candidates.empty())
+    if (found.empty())
     {
-        return result;
+        return reads;
     }
-    std::vector<argus::PlateCandidate> kept = result.candidates;
-    result = voteReading(frame, result.candidates);
-    result.candidates = kept;
-    lookupWatchlistMatch(result);
-    return result;
-}
-
-ScanResult ofApp::voteReading(const ofImage& frame,
-                              const std::vector<argus::PlateCandidate>& candidates)
-{
-    ScanResult best;
-    float bestScore = -1.0f;
-    int voteCount = std::min(ocrVoteCount, static_cast<int>(candidates.size()));
-    // Valid reads win, confidence breaks ties and salvages misses.
-    for (int vote = 0; vote < voteCount; ++vote)
+    int readCount = std::min(maxPlateReads, static_cast<int>(found.size()));
+    // Every top box gets its own read, valid first for selection.
+    for (int read = 0; read < readCount; ++read)
     {
-        ScanResult attempt = readVoteBox(frame, candidates[vote]);
-        float score = attempt.plateValid ? 1000.0f + attempt.ocr.meanConf : attempt.ocr.meanConf;
-        if (score <= bestScore)
-        {
-            continue;
-        }
-        bestScore = score;
-        best = attempt;
+        ScanResult attempt = readVoteBox(frame, found[read]);
+        attempt.candidateIndex = read;
+        lookupWatchlistMatch(attempt);
+        attempt.candidates = found;
+        reads.push_back(attempt);
     }
-    return best;
+    std::sort(reads.begin(), reads.end(), [](const ScanResult& left, const ScanResult& right)
+              { return rankReading(left) > rankReading(right); });
+    return reads;
 }
 
 void ofApp::lookupWatchlistMatch(ScanResult& result)
@@ -408,42 +464,80 @@ ScanResult ofApp::readVoteBox(const ofImage& frame, const argus::PlateCandidate&
     return vote;
 }
 
-void ofApp::applyScanResult(const ScanResult& result, const std::string& label)
+void ofApp::applyScanResult(const std::vector<ScanResult>& reads, const std::string& label)
 {
     bDetectorRan = true;
-    candidates = result.candidates;
-    std::string found = "Found " + ofToString(candidates.size()) + " candidate(s)";
+    plateReads = reads;
+    candidates = reads.empty() ? std::vector<argus::PlateCandidate>{} : reads.front().candidates;
+    std::string found = "Found " + ofToString(candidates.size()) + " candidate(s), " +
+                        ofToString(plateReads.size()) + " read(s)";
     logConsole("[PlateDetector] " + found, candidates.empty() ? "WARNING" : "INFO");
     ofLogNotice("PlateDetector") << found;
     if (pipelineDebug)
     {
         logCandidateDetails();
     }
-    bHasBest = result.hasBest;
-    bOcrRan = true;
-    lastOcrResult = result.ocr;
-    if (result.hasBest)
+    if (plateReads.empty())
     {
-        bestCandidate = result.bestCandidate;
-        plateRoiImg = result.roiImage;
+        clearEmptyResults(label);
+        return;
     }
-    if (lastOcrResult.text.empty())
+    selectPlate(selectedPlate);
+    const ScanResult& primary = plateReads[selectedPlate];
+    if (primary.ocr.text.empty())
     {
         logConsole("[PlateOCR] empty result", "WARNING");
         ofLogNotice("PlateOCR") << "empty result";
     }
     else
     {
-        std::string reading = "Recognized: '" + lastOcrResult.text + "' mean " +
-                              ofToString(lastOcrResult.meanConf, 1);
-        std::string level = lastOcrResult.meanConf < ocrReviewConf ? "WARNING" : "INFO";
+        std::string reading =
+            "Recognized: '" + primary.ocr.text + "' mean " + ofToString(primary.ocr.meanConf, 1);
+        std::string level = primary.ocr.meanConf < ocrReviewConf ? "WARNING" : "INFO";
         logConsole("[PlateOCR] " + reading, level);
         ofLogNotice("PlateOCR") << reading;
     }
-    logValidationDetails(result);
-    logFlagDetails(result);
-    logPipelineSummary(result, label);
+    logValidationDetails(primary);
+    logFlagDetails(primary);
+    // Alerts follow the strongest hit even when another read is shown.
+    currentMatch = strongestMatch(plateReads);
+    logPipelineSummary(plateReads, label);
     checkAlert();
+}
+
+// Clears display members and reports a plateless run.
+void ofApp::clearEmptyResults(const std::string& label)
+{
+    bHasBest = false;
+    bOcrRan = true;
+    lastOcrResult = argus::OcrResult{};
+    rawPlateText.clear();
+    normalizedPlateText.clear();
+    plateValid = false;
+    detectedRegion = argus::Region::Unknown;
+    currentMatch.reset();
+    logConsole("[PlateOCR] empty result", "WARNING");
+    ofLogNotice("PlateOCR") << "empty result";
+    logPipelineSummary(plateReads, label);
+}
+
+void ofApp::selectPlate(int index)
+{
+    if (plateReads.empty())
+    {
+        selectedPlate = 0;
+        return;
+    }
+    selectedPlate = ofClamp(index, 0, static_cast<int>(plateReads.size()) - 1);
+    const ScanResult& read = plateReads[selectedPlate];
+    bHasBest = read.hasBest;
+    bOcrRan = true;
+    lastOcrResult = read.ocr;
+    bestCandidate = read.bestCandidate;
+    plateRoiImg = read.roiImage;
+    logConsole("Inspector shows plate " + ofToString(selectedPlate + 1) + "/" +
+                   ofToString(plateReads.size()) + " '" + read.ocr.text + "'",
+               "INFO");
 }
 
 bool ofApp::runPipelineChecks()
@@ -451,10 +545,10 @@ bool ofApp::runPipelineChecks()
     std::string reason;
     ofImage tinyImage;
     tinyImage.allocate(1, 1, OF_IMAGE_COLOR);
-    ScanResult tinyResult = processFrame(tinyImage);
-    if (!tinyResult.candidates.empty())
+    std::vector<ScanResult> tinyReads = processFrame(tinyImage);
+    if (!tinyReads.empty())
     {
-        reason = "tiny frame returned candidates";
+        reason = "tiny frame returned reads";
     }
     else
     {
@@ -462,15 +556,16 @@ bool ofApp::runPipelineChecks()
         loadSampleImage(sample, reason);
         if (reason.empty())
         {
-            ScanResult sampleResult = processFrame(sample);
-            bool countOk = !sampleResult.candidates.empty() && sampleResult.candidates.size() <= 5;
-            bool textOk = sampleResult.ocr.text.size() >= 5 && sampleResult.ocr.text.size() <= 8;
+            std::vector<ScanResult> sampleReads = processFrame(sample);
+            bool countOk = !sampleReads.empty() && sampleReads.size() <= 4;
+            bool textOk = !sampleReads.empty() && sampleReads.front().ocr.text.size() >= 5 &&
+                          sampleReads.front().ocr.text.size() <= 8;
             if (!countOk || !textOk)
             {
                 reason = "sample frame result implausible";
             }
             // Report the full chain so headless runs show end-to-end health.
-            logPipelineSummary(sampleResult, "check");
+            logPipelineSummary(sampleReads, "check");
         }
     }
 
@@ -553,13 +648,16 @@ void ofApp::logFlagDetails(const ScanResult& result)
     ofLogNotice("FlagStore") << detail;
 }
 
-void ofApp::logPipelineSummary(const ScanResult& result, const std::string& label)
+void ofApp::logPipelineSummary(const std::vector<ScanResult>& reads, const std::string& label)
 {
-    std::string summary = "[Pipeline] " + label +
-                          ": candidates=" + ofToString(result.candidates.size()) + ", OCR='" +
-                          result.ocr.text + "' conf=" + ofToString(result.ocr.meanConf, 1) +
-                          " valid=" + (result.plateValid ? "Y" : "N") +
-                          " flag=" + (result.match.has_value() ? "Y" : "N");
+    std::size_t candidateCount = reads.empty() ? 0 : reads.front().candidates.size();
+    std::string summary = "[Pipeline] " + label + ": candidates=" + ofToString(candidateCount) +
+                          ", reads=" + ofToString(reads.size());
+    for (const auto& read : reads)
+    {
+        summary += " '" + read.ocr.text + "'(" + ofToString(read.ocr.meanConf, 1) + "," +
+                   (read.plateValid ? "Y" : "N") + "," + (read.match.has_value() ? "Y" : "N") + ")";
+    }
     logConsole(summary, "INFO");
     ofLogNotice("Pipeline") << summary;
 }
@@ -690,14 +788,20 @@ void ofApp::saveDecisionAndLog()
     event.plateRaw = rawPlateText;
     event.plateNorm = normalizedPlateText;
     event.ocrConf = lastOcrResult.meanConf;
-    event.flagMatch = currentMatch.has_value();
+    event.flagMatch = false;
+    event.flagType.clear();
+    if (!plateReads.empty() && selectedPlate < static_cast<int>(plateReads.size()))
+    {
+        const ScanResult& logged = plateReads[selectedPlate];
+        event.flagMatch = logged.match.has_value();
+        if (event.flagMatch)
+        {
+            event.flagType = flagTypeTag(logged.match->type);
+        }
+    }
     event.region = regionName(detectedRegion);
     event.decision = currentDecision;
     event.operatorNotes = operatorNotes;
-    if (event.flagMatch)
-    {
-        event.flagType = flagTypeTag(currentMatch->type);
-    }
     logger.log(event, scanLogPath);
     bLoggerRan = true;
     saveToastText = "Decision saved -> logs.jsonl";
@@ -930,10 +1034,108 @@ bool ofApp::runDetectionQualityChecks()
 
 void ofApp::update()
 {
-    if (mediaKind == MediaKind::Video)
+    if (mediaKind != MediaKind::Video)
     {
-        videoPlayer.update();
-        readVideoFrame();
+        return;
+    }
+    videoPlayer.update();
+    readVideoFrame();
+    if (!autoProcess || !videoPlayer.isPlaying() || !frameImage.isAllocated())
+    {
+        return;
+    }
+    ++liveFrameCount;
+    if (!videoFirstPending && liveFrameCount % liveSampleStep != 0)
+    {
+        return;
+    }
+    videoFirstPending = false;
+    processLiveFrame();
+}
+
+void ofApp::processLiveFrame()
+{
+    if (mediaKind != MediaKind::Video || !frameImage.isAllocated())
+    {
+        return;
+    }
+    std::vector<ScanResult> reads = processFrame(frameImage);
+    applyScanResult(reads, "live");
+    updateFrameTracks(reads);
+    recordFrameVote(normalizedPlateText);
+    std::string live = "[Pipeline] Live tracks: " + ofToString(frameTracks.size());
+    if (!frameTracks.empty())
+    {
+        auto tally = majorityVote(frameTracks.front().votes);
+        live += ", vote '" + tally.first + "' " + ofToString(tally.second) + "/" +
+                ofToString(frameTracks.front().votes.size());
+    }
+    logConsole(live, "INFO");
+    ofLogNotice("Pipeline") << live;
+}
+
+void ofApp::updateFrameTracks(const std::vector<ScanResult>& reads)
+{
+    std::vector<bool> hit(frameTracks.size(), false);
+    for (const auto& read : reads)
+    {
+        if (read.normalizedPlate.empty())
+        {
+            continue;
+        }
+        std::size_t bestTrack = matchTrack(read.bestCandidate.rect);
+        if (bestTrack < frameTracks.size())
+        {
+            FrameTrack& track = frameTracks[bestTrack];
+            track.rect = read.bestCandidate.rect;
+            track.votes.push_back(read.normalizedPlate);
+            while (track.votes.size() > MAX_FRAME_VOTES)
+            {
+                track.votes.erase(track.votes.begin());
+            }
+            track.missed = 0;
+            hit[bestTrack] = true;
+        }
+        else if (frameTracks.size() < MAX_FRAME_TRACKS)
+        {
+            FrameTrack fresh;
+            fresh.rect = read.bestCandidate.rect;
+            fresh.votes.push_back(read.normalizedPlate);
+            frameTracks.push_back(fresh);
+            hit.push_back(true);
+        }
+    }
+    sweepStaleTracks(hit);
+}
+
+std::size_t ofApp::matchTrack(const ofRectangle& box)
+{
+    std::size_t bestTrack = frameTracks.size();
+    double bestOverlap = TRACK_OVERLAP;
+    for (std::size_t track = 0; track < frameTracks.size(); ++track)
+    {
+        double overlap = rectOverlap(box, frameTracks[track].rect);
+        if (overlap > bestOverlap)
+        {
+            bestOverlap = overlap;
+            bestTrack = track;
+        }
+    }
+    return bestTrack;
+}
+
+void ofApp::sweepStaleTracks(const std::vector<bool>& hit)
+{
+    for (std::size_t track = frameTracks.size(); track-- > 0;)
+    {
+        if (hit[track])
+        {
+            continue;
+        }
+        if (++frameTracks[track].missed > TRACK_MISSED_LIMIT)
+        {
+            frameTracks.erase(frameTracks.begin() + track);
+        }
     }
 }
 
@@ -1066,6 +1268,10 @@ bool ofApp::loadImageMedia(const std::string& path)
     currentMediaPath = path;
     logConsole("Loaded image: " + path, "INFO");
     ofLogNotice("Media") << "Loaded image: " << path;
+    if (autoProcess)
+    {
+        runDetection();
+    }
     return true;
 }
 
@@ -1111,7 +1317,12 @@ void ofApp::readVideoFrame()
     {
         return;
     }
+    bool fresh = !frameImage.isAllocated();
     frameImage.setFromPixels(videoPlayer.getPixels());
+    if (fresh)
+    {
+        videoFirstPending = true;
+    }
 }
 
 void ofApp::processVideoFrame()
@@ -1121,9 +1332,10 @@ void ofApp::processVideoFrame()
         logConsole("No video frame decoded yet", "ERROR");
         return;
     }
-    ScanResult result = processFrame(frameImage);
-    applyScanResult(result, "video");
-    recordFrameVote(result.normalizedPlate);
+    std::vector<ScanResult> reads = processFrame(frameImage);
+    applyScanResult(reads, "video");
+    updateFrameTracks(reads);
+    recordFrameVote(normalizedPlateText);
 }
 
 void ofApp::recordFrameVote(const std::string& normalizedPlate)
@@ -1154,9 +1366,10 @@ bool ofApp::runMediaChecks()
     auto tieTally = majorityVote({"AB12CD", "XY98ZT"});
     bool voteOk = tally.first == "SN66XMZ" && tally.second == 2 && emptyTally.second == 0 &&
                   tieTally.first == "AB12CD" && tieTally.second == 1;
-    if (!extOk || !voteOk)
+    bool tracksOk = checkTrackMatching();
+    if (!extOk || !voteOk || !tracksOk)
     {
-        reason = "extension or tally mismatch";
+        reason = "extension, tally or track mismatch";
     }
     else if (loadMedia("resources/no_such_file.jpg"))
     {
@@ -1173,6 +1386,24 @@ bool ofApp::runMediaChecks()
     logConsole("Media checks: OK", "INFO");
     ofLogNotice("Media") << "Media checks: OK";
     return true;
+}
+
+bool ofApp::checkTrackMatching()
+{
+    FrameTrack seeded;
+    seeded.rect.set(10.0f, 10.0f, 100.0f, 30.0f);
+    frameTracks = {seeded};
+    ScanResult nearRead;
+    nearRead.bestCandidate.rect.set(12.0f, 11.0f, 100.0f, 30.0f);
+    nearRead.normalizedPlate = "AB12CD";
+    ScanResult farRead;
+    farRead.bestCandidate.rect.set(400.0f, 300.0f, 100.0f, 30.0f);
+    farRead.normalizedPlate = "XY98ZT";
+    updateFrameTracks({nearRead, farRead});
+    bool matched = frameTracks.size() == 2 && frameTracks[0].votes.size() == 1 &&
+                   frameTracks[1].votes.size() == 1;
+    frameTracks.clear();
+    return matched;
 }
 
 void ofApp::drawPipelinePanel()
@@ -1458,6 +1689,20 @@ void ofApp::drawInspectorPanel()
     ImGui::Begin(INSPECTOR_WINDOW_TITLE, &showInspector);
     if (ImGui::CollapsingHeader("Match Info", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        if (!plateReads.empty())
+        {
+            ImGui::Text("Plate %d/%d", selectedPlate + 1, static_cast<int>(plateReads.size()));
+            ImGui::SameLine();
+            if (ImGui::Button("Prev"))
+            {
+                selectPlate(selectedPlate - 1);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Next"))
+            {
+                selectPlate(selectedPlate + 1);
+            }
+        }
         if (currentMatch.has_value())
         {
             const argus::FlagEntry& entry = currentMatch.value();
@@ -1743,13 +1988,28 @@ void ofApp::drawCandidateOverlays()
         float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
         float boxW = candidate.rect.width * scaleX;
         float boxH = candidate.rect.height * scaleY;
-        bool flagged = bHasBest && i == 0 && currentMatch.has_value();
+        std::string boxText;
+        bool boxFlagged = false;
+        for (const auto& read : plateReads)
+        {
+            if (read.candidateIndex != static_cast<int>(i))
+            {
+                continue;
+            }
+            boxText = read.ocr.text;
+            boxFlagged = read.match.has_value() && read.match->type == argus::FlagType::Blocked;
+        }
+        bool flagged = boxFlagged || (bHasBest && i == 0 && currentMatch.has_value());
         ofSetColor(flagged ? BOX_FLAG_COLOR : BOX_OK_COLOR);
         ofDrawRectangle(boxX, boxY, boxW, boxH);
         ofSetColor(255, 255, 255);
         int percent = static_cast<int>(candidate.confidence * 100.0f);
         std::string label = ofToString(percent) + "%";
-        if (bHasBest && i == 0 && !lastOcrResult.text.empty())
+        if (!boxText.empty())
+        {
+            label = boxText + " " + label;
+        }
+        else if (bHasBest && i == 0 && !lastOcrResult.text.empty())
         {
             label = lastOcrResult.text + " " + label;
         }
@@ -1798,6 +2058,14 @@ void ofApp::keyPressed(int key)
     if (key == 'o' || key == 'O')
     {
         browseMedia();
+    }
+    if (key == '[')
+    {
+        selectPlate(selectedPlate - 1);
+    }
+    if (key == ']')
+    {
+        selectPlate(selectedPlate + 1);
     }
 }
 

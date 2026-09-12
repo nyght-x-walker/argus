@@ -124,8 +124,9 @@ bool PlateValidator::isValid(const std::string& normalized, Region& region) cons
 std::string PlateValidator::repair(const std::string& normalized) const
 {
     Region region = Region::Unknown;
-    if (normalized.empty() || isValid(normalized, region))
+    if (normalized.size() < 4 || isValid(normalized, region))
     {
+        // Short strings lack the signal for directed repair.
         return normalized;
     }
     // Digit slots first, unrepairable reads stay honest.
