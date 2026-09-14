@@ -31,6 +31,8 @@ struct ScanResult
     bool plateValid = false;
     argus::Region region = argus::Region::Unknown;
     std::optional<argus::FlagEntry> match;
+    bool wasRepaired = false;
+    int candidateIndex = -1;
 };
 
 /// ofApp hosts the single-window UI and the viewport state.
@@ -55,6 +57,56 @@ public:
 
     /// Image loaded from resources/images/car_01.jpg.
     ofImage img;
+
+    /// Active media source driving the viewport and pipeline.
+    enum class MediaKind
+    {
+        None,
+        Image,
+        Video
+    };
+
+    /// Current media kind, empty until the operator loads media.
+    MediaKind mediaKind = MediaKind::None;
+
+    /// Path of the loaded image or video for display and logging.
+    std::string currentMediaPath;
+
+    /// Video decoder behind the viewport in video mode.
+    ofVideoPlayer videoPlayer;
+
+    /// Latest decoded video frame feeding display and pipeline.
+    ofImage frameImage;
+
+    /// Recent normalized reads backing the temporal vote.
+    std::vector<std::string> frameVotes;
+
+    /// Cap keeping the temporal vote window bounded.
+    static constexpr std::size_t MAX_FRAME_VOTES = 9;
+
+    /// Loads an image or video path into the matching backend.
+    bool loadMedia(const std::string& path);
+
+    /// Loads a still image and parks the video decoder.
+    bool loadImageMedia(const std::string& path);
+
+    /// Loads a video file and starts playback.
+    bool loadVideoMedia(const std::string& path);
+
+    /// Opens the native file dialog and loads the chosen media.
+    void browseMedia();
+
+    /// Display pixels, video frame first when one is decoded.
+    const ofImage& displayImage() const;
+
+    /// Copies a fresh decoder frame into the frame image.
+    void readVideoFrame();
+
+    /// Runs the unified pipeline on the current video frame.
+    void processVideoFrame();
+
+    /// Records a read and logs the majority across recent frames.
+    void recordFrameVote(const std::string& normalizedPlate);
 
     /// Visibility toggles for the docked panels.
     bool showImageViewer = true;
@@ -105,10 +157,25 @@ public:
     void runDetection();
 
     /// Runs the full chain on any frame without touching members.
-    ScanResult processFrame(const ofImage& frame);
+    std::vector<ScanResult> processFrame(const ofImage& frame);
 
-    /// Copies a scan result into members, logs it and checks alerts.
-    void applyScanResult(const ScanResult& result, const std::string& label);
+    /// Reads one candidate box into a single scan result.
+    ScanResult readVoteBox(const ofImage& frame, const argus::PlateCandidate& box);
+
+    /// Exact watchlist hit first, one-glyph near miss for shaky reads.
+    void lookupWatchlistMatch(ScanResult& result);
+
+    /// Copies scan results into members, logs them and checks alerts.
+    void applyScanResult(const std::vector<ScanResult>& reads, const std::string& label);
+
+    /// Shows one plate read in the inspector and log selection.
+    void selectPlate(int index);
+
+    /// Clears display members and reports a plateless run.
+    void clearEmptyResults(const std::string& label);
+
+    /// Runs the unified pipeline on the current live video frame.
+    void processLiveFrame();
 
     /// Extra per-candidate lines in the pipeline log when enabled.
     bool pipelineDebug = false;
@@ -130,6 +197,27 @@ public:
 
     /// Master switch for ROI preparation applied during setup.
     bool ocrPreprocess = true;
+
+    /// Top confidence-ranked boxes read per frame.
+    int maxPlateReads = 4;
+
+    /// All plate reads from the latest run, valid first.
+    std::vector<ScanResult> plateReads;
+
+    /// Index into plateReads shown in the inspector.
+    int selectedPlate = 0;
+
+    /// Automatic pipeline runs on loads and sampled video frames.
+    bool autoProcess = true;
+
+    /// Decoded frames between live automatic runs.
+    int liveSampleStep = 45;
+
+    /// Decoded video frames seen, driving live sampling.
+    int liveFrameCount = 0;
+
+    /// First decoded frame still awaiting its automatic run.
+    bool videoFirstPending = false;
 
     /// Latest OCR result for the best candidate.
     argus::OcrResult lastOcrResult;
@@ -154,6 +242,9 @@ public:
 
     /// Verifies the unified pipeline on fixed frame inputs.
     bool runPipelineChecks();
+
+    /// Verifies media loading and vote tally on fixed inputs.
+    bool runMediaChecks();
 
     /// Cleans OCR text and checks the EU generic shape.
     argus::PlateValidator validator;
@@ -247,6 +338,12 @@ public:
     /// Writes and re-parses one probe event for the self-check.
     bool verifyLoggerRoundTrip(std::string& reason);
 
+    /// Saves one probe entry to a temp file and reads it back.
+    bool checkFlagRoundTrip();
+
+    /// Verifies exact and fuzzy lookups on fixed seed cases.
+    bool checkSeedLookups(argus::FlagStore& probe);
+
     /// Converts a decision choice to its log label.
     static std::string decisionName(Decision decision);
 
@@ -260,10 +357,57 @@ public:
     void logFlagDetails(const ScanResult& result);
 
     /// Logs the single-line frame summary for images and video.
-    void logPipelineSummary(const ScanResult& result, const std::string& label);
+    void logPipelineSummary(const std::vector<ScanResult>& reads, const std::string& label);
 
     /// Runs the unified pipeline on the current image as a frame.
     void handleFrameAction();
+
+    /// Loads the sample and runs it for a guaranteed flagged demo.
+    void demoFlaggedRun();
+
+    /// Rejects a garbage file through the real load path.
+    void corruptDemoRun();
+
+    /// Sweeps bundled images through detection with a summary.
+    void batchProcessImages();
+
+    /// Runs the pipeline on a blank frame showing failure state.
+    void ocrFailDemoRun();
+
+    /// Releases derived caches and reports what was freed.
+    void purgeCaches();
+
+    /// Toggles video playback, logging when no video is loaded.
+    void toggleVideoPlay();
+
+    /// Seeks the loaded video by a signed second offset.
+    void seekVideo(float seconds);
+
+    /// Flag editor input capacities.
+    static constexpr std::size_t FLAG_PLATE_SIZE = 32;
+    static constexpr std::size_t FLAG_REASON_SIZE = 256;
+
+    /// Flag editor modal visibility.
+    bool showFlagModal = false;
+
+    /// Flag editor plate and reason inputs.
+    char flagPlateBuffer[FLAG_PLATE_SIZE];
+    char flagReasonBuffer[FLAG_REASON_SIZE];
+
+    /// Flag editor selected severity index.
+    int flagTypeIndex = 0;
+
+    /// Draws the add/edit flagged modal with live validation.
+    void drawFlagModal();
+
+    /// Stores the modal inputs into the watchlist file.
+    void saveFlagEntry();
+
+    /// Loads one watchlist entry into the flag modal inputs.
+    void editFlagEntry(const std::string& plate);
+
+    /// Drops one watchlist entry and persists the remainder.
+    void deleteFlagEntry(const std::string& plate);
 
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
@@ -290,14 +434,19 @@ private:
     /// Draws the top menu bar with the frame rate chip.
     void drawMenuBar();
 
-    /// Draws the left pipeline panel with stub controls.
+    /// Draws the left pipeline panel with run controls.
     void drawPipelinePanel();
-
     /// Draws the center viewport panel and captures its image rect.
     void drawViewportPanel();
 
-    /// Draws the viewport toolbar row with stub buttons.
+    /// Draws the viewport toolbar row with transport buttons.
     void drawViewportToolbar();
+
+    /// Draws seek position with frame and memory chips.
+    void drawTransportStatus();
+
+    /// Reserves aspect-fit space and captures the image rect.
+    void measureViewportRect(const ofImage& view);
 
     /// Draws the right inspector panel with collapsible sections.
     void drawInspectorPanel();
@@ -314,6 +463,9 @@ private:
     /// Draws the watchlist table inside the Flagged tab.
     void drawFlaggedTab();
 
+    /// Draws one watchlist row with edit and delete actions.
+    void drawFlaggedRow(const argus::FlagEntry& row);
+
     /// Draws the alert banner over the viewport when active.
     void drawAlertBanner();
 
@@ -326,15 +478,48 @@ private:
     /// Draws one scan event row with severity highlighting.
     void drawLogsRow(const argus::ScanEvent& event);
 
+    /// Draws real memory usage with a working clear button.
+    void drawMemoryTab();
+
     /// Draws the loaded image into the captured viewport rect.
     void drawViewportImage();
 
     /// Draws candidate boxes mapped from image to viewport coordinates.
     void drawCandidateOverlays();
 
+    /// Reads one box label text with its blocked flag.
+    void readBoxLabel(std::size_t index, std::string& text, bool& flagged);
+
+    /// Draws one candidate box with labels at viewport scale.
+    void drawCandidateBox(std::size_t index, const argus::PlateCandidate& candidate, float scaleX,
+                          float scaleY);
+
     /// Draws per-character confidence chips in the inspector.
     void drawOcrChips();
 
     /// Shared stub behind the Run button and the R key.
     void handleRunAction();
+
+    /// One tracked plate across sampled video frames.
+    struct FrameTrack
+    {
+        ofRectangle rect;
+        std::vector<std::string> votes;
+        int missed = 0;
+    };
+
+    /// Live plate tracks matched by overlap between samples.
+    std::vector<FrameTrack> frameTracks;
+
+    /// Matches reads to tracks and drops stale ones.
+    void updateFrameTracks(const std::vector<ScanResult>& reads);
+
+    /// Best track overlapping a box, past-the-end when none.
+    std::size_t matchTrack(const ofRectangle& box);
+
+    /// Drops tracks unseen for longer than the miss limit.
+    void sweepStaleTracks(const std::vector<bool>& hit);
+
+    /// Verifies overlap matching on fixed synthetic tracks.
+    bool checkTrackMatching();
 };

@@ -1,5 +1,5 @@
 // Argus plate text normalization and format validation.
-// Single-region EU generic checks with confusion repair.
+// EU generic checks with US/UK region refinement and confusion repair.
 #pragma once
 
 #include <string>
@@ -24,17 +24,21 @@ struct ValidationResult
     bool valid = false;
 };
 
-/// PlateValidator cleans OCR text and checks one EU generic format.
+/// PlateValidator cleans OCR text and checks EU, US and UK formats.
+/// The EU generic shape decides validity; strict US/UK shapes refine the region.
 class PlateValidator
 {
 public:
     /// Uppercases, strips noise and repairs O/I confusions.
     std::string normalize(const std::string& raw) const;
 
-    /// Checks the EU generic shape, reporting the region on success.
+    /// Tries single confusion swaps until a known shape accepts.
+    std::string repair(const std::string& normalized) const;
+
+    /// Checks known shapes, reporting the most specific region on success.
     bool isValid(const std::string& normalized, Region& region) const;
 
-    /// Normalizes then validates in one call.
+    /// Normalizes, repairs one confusion, then validates in one call.
     ValidationResult validate(const std::string& raw) const;
 };
 

@@ -17,7 +17,8 @@ struct PlateCandidate
 };
 
 /// PlateDetector finds plate-like rectangles with an edge heuristic.
-/// Narrow and wide closings catch small and large plates respectively.
+/// Narrow and wide closings catch small and large plates respectively,
+/// while side area bands recover boxes just outside the tuned gates.
 class PlateDetector
 {
 public:
@@ -28,6 +29,10 @@ public:
     float maxAspectRatio = 6.0f;
     int cannyLow = 40;
     int cannyHigh = 120;
+
+    /// Side band multipliers reaching below and above the tuned gates.
+    float smallAreaScale = 0.5f;
+    float largeAreaScale = 2.0f;
 
     /// Extra contour statistics on the console when enabled.
     bool debugMode = false;
