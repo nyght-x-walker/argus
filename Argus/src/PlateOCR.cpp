@@ -21,6 +21,19 @@ constexpr char PLATE_WHITELIST[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 // Short ROI height below which doubling helps the line finder.
 constexpr int SMALL_ROI_HEIGHT = 50;
 
+// Readable floor for the line finder, with a cap bounding noise blowup.
+constexpr int MIN_ROI_WIDTH = 240;
+constexpr int MIN_ROI_HEIGHT = 60;
+constexpr float MAX_ADAPTIVE_SCALE = 4.0f;
+
+// Black padding share keeping strokes off the ROI edge.
+constexpr int ROI_PAD_DIVISOR = 20;
+constexpr int ROI_PAD_MIN = 4;
+constexpr int ROI_PAD_MAX = 12;
+
+// Block and sparse-text modes retried when the single-line read is weak.
+constexpr int FALLBACK_PSMS[] = {6, 11};
+
 // Inner crop margin divisor trimming plate borders and tight edges.
 constexpr int BORDER_MARGIN_DIVISOR = 10;
 
@@ -78,7 +91,7 @@ void toGrayscale(const ofImage& input, cv::Mat& gray)
     cv::cvtColor(color, gray, code);
 }
 
-// Trims plate borders, then doubles tiny ROIs for the line finder.
+// Trims borders, scales small plates up, then pads strokes off the edge.
 void prepareRoi(const cv::Mat& gray, cv::Mat& ready)
 {
     int margin = std::min(gray.cols, gray.rows) / BORDER_MARGIN_DIVISOR;
@@ -86,12 +99,21 @@ void prepareRoi(const cv::Mat& gray, cv::Mat& ready)
     cv::Rect inner(margin, margin, gray.cols - 2 * margin, gray.rows - 2 * margin);
     inner &= cv::Rect(0, 0, gray.cols, gray.rows);
     cv::Mat cropped = gray(inner).clone();
+    cv::Mat scaled = cropped;
     if (cropped.rows < SMALL_ROI_HEIGHT)
     {
-        cv::resize(cropped, ready, cv::Size(), 2.0, 2.0, cv::INTER_LINEAR);
-        return;
+        cv::resize(cropped, scaled, cv::Size(), 2.0, 2.0, cv::INTER_LINEAR);
     }
-    ready = cropped;
+    float scale = std::max(static_cast<float>(MIN_ROI_WIDTH) / scaled.cols,
+                           static_cast<float>(MIN_ROI_HEIGHT) / scaled.rows);
+    if (scale > 1.0f)
+    {
+        scale = std::min(scale, MAX_ADAPTIVE_SCALE);
+        cv::resize(scaled, scaled, cv::Size(), scale, scale, cv::INTER_CUBIC);
+    }
+    int pad =
+        ofClamp(std::min(scaled.cols, scaled.rows) / ROI_PAD_DIVISOR, ROI_PAD_MIN, ROI_PAD_MAX);
+    cv::copyMakeBorder(scaled, ready, pad, pad, pad, pad, cv::BORDER_CONSTANT, cv::Scalar(0));
 }
 
 // Averages symbol confidences for a self-computed reliability score.
@@ -152,6 +174,24 @@ bool readPreparedText(tesseract::TessBaseAPI& api, const cv::Mat& ready, std::st
         return false;
     }
     text = stripNoise(out.get());
+    return true;
+}
+
+// Reads one prepared mat under a single segmentation mode.
+bool readAtSegmentation(tesseract::TessBaseAPI& api, const cv::Mat& ready, int psm,
+                        argus::OcrResult& out)
+{
+    api.SetPageSegMode(static_cast<tesseract::PageSegMode>(psm));
+    std::string rawText;
+    // Degenerate reads stay empty instead of confident garbage.
+    if (!readPreparedText(api, ready, rawText) || rawText.size() <= 1)
+    {
+        return false;
+    }
+    out.text = rawText;
+    collectCharConfidences(api, out.text, out.perCharConf);
+    // Word means stay near zero on LSTM reads, so average the symbols.
+    out.meanConf = averageCharConf(out.perCharConf);
     return true;
 }
 
@@ -231,23 +271,21 @@ OcrResult PlateOCR::recognize(const ofImage& plateRoi)
         prepareRoi(gray, ready);
     }
 
-    std::string rawText;
-    if (!readPreparedText(*api, ready, rawText))
+    readAtSegmentation(*api, ready, tesseractPsm, result);
+    if (!result.text.empty() && result.meanConf >= minConfidence)
     {
         return result;
     }
-    result.text = rawText;
-    if (result.text.size() <= 1)
+    // Weak single-line reads get one retry per fallback mode, best kept.
+    for (int psm : FALLBACK_PSMS)
     {
-        // Degenerate reads stay empty instead of confident garbage.
-        result.text.clear();
-        result.meanConf = 0.0f;
-        return result;
+        OcrResult retry;
+        if (readAtSegmentation(*api, ready, psm, retry) && retry.meanConf > result.meanConf)
+        {
+            result = retry;
+        }
     }
-
-    collectCharConfidences(*api, result.text, result.perCharConf);
-    // Word means stay near zero on LSTM reads, so average the symbols.
-    result.meanConf = averageCharConf(result.perCharConf);
+    api->SetPageSegMode(static_cast<tesseract::PageSegMode>(tesseractPsm));
     return result;
 }
 

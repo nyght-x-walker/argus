@@ -50,6 +50,9 @@ constexpr float NMS_OVERLAP = 0.35f;
 // Extent floor rejecting degenerate open contours.
 constexpr float MIN_EXTENT = 0.1f;
 
+// Ceiling capping the large side band on close-up plates.
+constexpr float MAX_AREA_CEILING = 0.30f;
+
 // Converts any ofImage pixel format into an 8-bit grayscale Mat.
 void toGrayscale(const ofImage& input, cv::Mat& gray)
 {
@@ -240,8 +243,13 @@ std::vector<PlateCandidate> PlateDetector::detect(const ofImage& input)
     detectEdges(gray, cannyLow, cannyHigh, rawEdges);
     double imageArea = static_cast<double>(gray.cols) * static_cast<double>(gray.rows);
 
-    // Narrow pass keeps small plates separate, wide pass joins large ones.
+    // Base band keeps the tuned gates, side bands recover near misses.
     collectScaleBlobs(rawEdges, imageArea, minAreaFraction, maxAreaFraction, minAspectRatio,
+                      maxAspectRatio, candidates);
+    collectScaleBlobs(rawEdges, imageArea, minAreaFraction * smallAreaScale, minAreaFraction,
+                      minAspectRatio, maxAspectRatio, candidates);
+    float largeMax = std::min(maxAreaFraction * largeAreaScale, MAX_AREA_CEILING);
+    collectScaleBlobs(rawEdges, imageArea, maxAreaFraction, largeMax, minAspectRatio,
                       maxAspectRatio, candidates);
     std::size_t blobCount = candidates.size();
 

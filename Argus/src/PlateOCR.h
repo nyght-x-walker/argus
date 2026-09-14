@@ -25,7 +25,7 @@ struct OcrResult
 };
 
 /// PlateOCR recognizes plate text through a reused Tesseract instance.
-/// Grayscale inner crop plus optional doubling feeds the LSTM engine.
+/// Prepared grayscale crop with adaptive scaling feeds the LSTM engine.
 class PlateOCR
 {
 public:
@@ -41,7 +41,7 @@ public:
     /// Master switch for the crop and upscale preparation.
     bool preprocessEnable = true;
 
-    /// Segmentation mode for short single-line plate text.
+    /// Primary segmentation mode, with block and sparse fallbacks on weak reads.
     int tesseractPsm = 7;
 
     /// True when the Tesseract engine initialized correctly.
