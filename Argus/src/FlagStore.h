@@ -1,5 +1,5 @@
 // Argus flagged plate watchlist backed by a JSON file.
-// Exact-match lookup over normalized plate text.
+// Exact, near-miss and prefix lookup over normalized plate text.
 #pragma once
 
 #include <optional>
@@ -50,6 +50,9 @@ public:
 
     /// Returns the closest entry within one glyph edit, if flagged.
     std::optional<FlagEntry> lookupFuzzy(const std::string& normalizedPlate) const;
+
+    /// Returns the first entry sharing a leading run, if flagged.
+    std::optional<FlagEntry> lookupPrefix(const std::string& normalizedPlate) const;
 
     /// Returns all entries ordered by plate text.
     std::vector<FlagEntry> entries() const;

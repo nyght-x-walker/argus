@@ -403,6 +403,12 @@ public:
     /// Stores the modal inputs into the watchlist file.
     void saveFlagEntry();
 
+    /// Loads one watchlist entry into the flag modal inputs.
+    void editFlagEntry(const std::string& plate);
+
+    /// Drops one watchlist entry and persists the remainder.
+    void deleteFlagEntry(const std::string& plate);
+
     /// ImGui context backing all docked panels.
     ofxImGui::Gui gui;
 
@@ -456,6 +462,9 @@ private:
 
     /// Draws the watchlist table inside the Flagged tab.
     void drawFlaggedTab();
+
+    /// Draws one watchlist row with edit and delete actions.
+    void drawFlaggedRow(const argus::FlagEntry& row);
 
     /// Draws the alert banner over the viewport when active.
     void drawAlertBanner();

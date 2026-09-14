@@ -40,8 +40,8 @@ const ofColor BOX_FLAG_COLOR(224, 108, 91);
 // Vertical offset of the watchlist label below a matched box.
 constexpr float FLAG_LABEL_OFFSET_Y = 14.0f;
 
-// Column count of the watchlist table in the Flagged tab.
-constexpr int FLAG_TABLE_COLUMNS = 5;
+// Column count of the watchlist table with per-row actions.
+constexpr int FLAG_TABLE_COLUMNS = 6;
 
 // Column count of the scan event table in the Logs tab.
 constexpr int LOG_TABLE_COLUMNS = 7;
@@ -471,6 +471,12 @@ void ofApp::lookupWatchlistMatch(ScanResult& result)
     }
     // Low-confidence reads may err by one glyph, allow near miss.
     result.match = flagStore.lookupFuzzy(result.normalizedPlate);
+    if (result.match.has_value())
+    {
+        return;
+    }
+    // Clipped reads may only share a leading run with the entry.
+    result.match = flagStore.lookupPrefix(result.normalizedPlate);
 }
 
 ScanResult ofApp::readVoteBox(const ofImage& frame, const argus::PlateCandidate& box)
@@ -1983,8 +1989,10 @@ void ofApp::drawFlagModal()
     std::string preview = validator.normalize(flagPlateBuffer);
     argus::Region previewRegion = argus::Region::Unknown;
     bool previewValid = validator.isValid(preview, previewRegion);
+    std::string previewVerdict =
+        previewValid ? "valid [" + regionName(previewRegion) + "]" : "invalid";
     ImGui::Text("Normalized: %s %s", preview.empty() ? "-" : preview.c_str(),
-                previewValid ? "valid [EU]" : "invalid");
+                previewVerdict.c_str());
     const char* severities[] = {"Blocked", "Suspicious", "Authorized"};
     ImGui::Combo("TYPE", &flagTypeIndex, severities, 3);
     ImGui::InputText("REASON", flagReasonBuffer, sizeof(flagReasonBuffer));
@@ -2079,21 +2087,77 @@ void ofApp::drawFlaggedTab()
     ImGui::NextColumn();
     ImGui::Text("Status");
     ImGui::NextColumn();
+    ImGui::Text("Action");
+    ImGui::NextColumn();
     ImGui::Separator();
     for (const auto& row : rows)
     {
-        ImGui::Text("%s", row.plate.c_str());
-        ImGui::NextColumn();
-        ImGui::Text("%s", argus::flagTypeToString(row.type).c_str());
-        ImGui::NextColumn();
-        ImGui::Text("%s", row.reason.c_str());
-        ImGui::NextColumn();
-        ImGui::Text("%s", row.addedDate.c_str());
-        ImGui::NextColumn();
-        ImGui::Text("Active");
-        ImGui::NextColumn();
+        drawFlaggedRow(row);
     }
     ImGui::Columns(1);
+}
+
+// Draws one watchlist row with edit and delete actions.
+void ofApp::drawFlaggedRow(const argus::FlagEntry& row)
+{
+    ImGui::Text("%s", row.plate.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", argus::flagTypeToString(row.type).c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", row.reason.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", row.addedDate.c_str());
+    ImGui::NextColumn();
+    ImGui::Text("%s", row.triggerAlert ? "Alert" : "Silent");
+    ImGui::NextColumn();
+    ImGui::PushID(row.plate.c_str());
+    if (ImGui::SmallButton("Edit"))
+    {
+        editFlagEntry(row.plate);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Delete"))
+    {
+        deleteFlagEntry(row.plate);
+    }
+    ImGui::PopID();
+    ImGui::NextColumn();
+}
+
+// Loads one watchlist entry into the flag modal inputs.
+void ofApp::editFlagEntry(const std::string& plate)
+{
+    std::optional<argus::FlagEntry> found = flagStore.lookup(plate);
+    if (!found.has_value())
+    {
+        logConsole("Flag edit missed for " + plate, "ERROR");
+        return;
+    }
+    const argus::FlagEntry& entry = found.value();
+    std::strncpy(flagPlateBuffer, entry.plate.c_str(), sizeof(flagPlateBuffer) - 1);
+    flagPlateBuffer[sizeof(flagPlateBuffer) - 1] = '\0';
+    std::strncpy(flagReasonBuffer, entry.reason.c_str(), sizeof(flagReasonBuffer) - 1);
+    flagReasonBuffer[sizeof(flagReasonBuffer) - 1] = '\0';
+    flagTypeIndex = entry.type == argus::FlagType::Blocked ? 0 : 1;
+    if (entry.type == argus::FlagType::Authorized)
+    {
+        flagTypeIndex = 2;
+    }
+    showFlagModal = true;
+}
+
+// Drops one watchlist entry and persists the remainder.
+void ofApp::deleteFlagEntry(const std::string& plate)
+{
+    flagStore.remove(plate);
+    if (!flagStore.save(flaggedJsonPath))
+    {
+        logConsole("Failed to save flagged.json", "ERROR");
+        return;
+    }
+    std::string dropped = "[FlagStore] Removed flagged " + plate;
+    logConsole(dropped, "INFO");
+    ofLogNotice("FlagStore") << dropped;
 }
 
 void ofApp::drawLogsTab()

@@ -1,5 +1,5 @@
 // Argus plate text normalization and format validation.
-// Single-region EU generic checks with confusion repair.
+// EU generic checks with US/UK region refinement and confusion repair.
 #include "PlateValidator.h"
 
 #include <cctype>
@@ -15,6 +15,37 @@ constexpr int MIN_LEAD_LETTERS = 1;
 constexpr int MAX_DIGITS = 4;
 constexpr int MIN_DIGITS = 1;
 constexpr int MAX_TAIL_LETTERS = 3;
+
+// Common US vendor shape: three letters followed by four digits.
+constexpr int US_LETTERS = 3;
+constexpr int US_DIGITS = 4;
+
+// Current UK shape: two letters, two digits, three letters.
+constexpr int UK_LEAD_LETTERS = 2;
+constexpr int UK_DIGITS = 2;
+constexpr int UK_TAIL_LETTERS = 3;
+
+// True for exactly lead letters, digits, then tail letters in order.
+bool strictGroups(const std::string& text, int leadLetters, int digits, int tailLetters)
+{
+    std::size_t leadEnd = static_cast<std::size_t>(leadLetters);
+    std::size_t digitEnd = leadEnd + static_cast<std::size_t>(digits);
+    if (text.size() != digitEnd + static_cast<std::size_t>(tailLetters))
+    {
+        return false;
+    }
+    for (std::size_t pos = 0; pos < text.size(); ++pos)
+    {
+        unsigned char code = static_cast<unsigned char>(text[pos]);
+        bool letterSlot = pos < leadEnd || pos >= digitEnd;
+        bool slotOk = letterSlot ? std::isupper(code) != 0 : std::isdigit(code) != 0;
+        if (!slotOk)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 // Consumes up to maxCount letters or digits from pos onward.
 std::size_t skipGroup(const std::string& text, std::size_t pos, int maxCount, bool letters)
@@ -117,7 +148,19 @@ bool PlateValidator::isValid(const std::string& normalized, Region& region) cons
     {
         return false;
     }
-    region = Region::EU;
+    // Strict shapes name the region of EU-valid reads.
+    if (strictGroups(normalized, US_LETTERS, US_DIGITS, 0))
+    {
+        region = Region::US;
+    }
+    else if (strictGroups(normalized, UK_LEAD_LETTERS, UK_DIGITS, UK_TAIL_LETTERS))
+    {
+        region = Region::UK;
+    }
+    else
+    {
+        region = Region::EU;
+    }
     return true;
 }
 

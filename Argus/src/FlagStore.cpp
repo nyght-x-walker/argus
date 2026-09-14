@@ -1,11 +1,20 @@
 // Argus flagged plate watchlist backed by a JSON file.
-// Exact-match lookup over normalized plate text.
+// Exact, near-miss and prefix lookup over normalized plate text.
 #include "FlagStore.h"
 
 #include "ofJson.h"
 
 #include <algorithm>
 #include <cstdio>
+#include <vector>
+
+namespace
+{
+
+// Leading characters shared before a prefix hit counts.
+constexpr std::size_t MIN_PREFIX_SEARCH = 3;
+
+} // namespace
 
 namespace argus
 {
@@ -61,40 +70,51 @@ std::optional<FlagEntry> FlagStore::lookup(const std::string& normalizedPlate) c
     return found->second;
 }
 
+// Edit distance between plates, computed over two rolling rows.
+std::size_t levenshteinDistance(const std::string& left, const std::string& right)
+{
+    if (left.empty())
+    {
+        return right.size();
+    }
+    if (right.empty())
+    {
+        return left.size();
+    }
+    std::vector<std::size_t> previous(right.size() + 1);
+    std::vector<std::size_t> current(right.size() + 1);
+    for (std::size_t col = 0; col <= right.size(); ++col)
+    {
+        previous[col] = col;
+    }
+    for (std::size_t row = 1; row <= left.size(); ++row)
+    {
+        current[0] = row;
+        for (std::size_t col = 1; col <= right.size(); ++col)
+        {
+            std::size_t change = left[row - 1] == right[col - 1] ? 0 : 1;
+            current[col] =
+                std::min({previous[col] + 1, current[col - 1] + 1, previous[col - 1] + change});
+        }
+        previous.swap(current);
+    }
+    return previous[right.size()];
+}
+
 // True when two plates differ by at most one substitution or gap.
 bool withinOneEdit(const std::string& left, const std::string& right)
 {
-    std::size_t i = 0;
-    std::size_t j = 0;
-    bool edited = false;
-    while (i < left.size() && j < right.size())
+    if (left.empty() || right.empty())
     {
-        if (left[i] == right[j])
-        {
-            ++i;
-            ++j;
-            continue;
-        }
-        if (edited)
-        {
-            return false;
-        }
-        edited = true;
-        if (left.size() == right.size())
-        {
-            ++i;
-            ++j;
-        }
-        else if (left.size() > right.size())
-        {
-            ++i;
-        }
-        else
-        {
-            ++j;
-        }
+        return false;
     }
-    return edited || i < left.size() || j < right.size();
+    std::size_t longer = std::max(left.size(), right.size());
+    std::size_t shorter = std::min(left.size(), right.size());
+    if (longer - shorter > 1)
+    {
+        return false;
+    }
+    return levenshteinDistance(left, right) <= 1;
 }
 
 std::optional<FlagEntry> FlagStore::lookupFuzzy(const std::string& normalizedPlate) const
@@ -107,6 +127,29 @@ std::optional<FlagEntry> FlagStore::lookupFuzzy(const std::string& normalizedPla
     for (const auto& entry : entries())
     {
         if (withinOneEdit(normalizedPlate, entry.plate))
+        {
+            return entry;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<FlagEntry> FlagStore::lookupPrefix(const std::string& normalizedPlate) const
+{
+    if (normalizedPlate.size() < MIN_PREFIX_SEARCH)
+    {
+        return std::nullopt;
+    }
+    // Sorted entries keep the winner deterministic on ties.
+    for (const auto& entry : entries())
+    {
+        std::size_t shared = 0;
+        while (shared < normalizedPlate.size() && shared < entry.plate.size() &&
+               normalizedPlate[shared] == entry.plate[shared])
+        {
+            ++shared;
+        }
+        if (shared >= MIN_PREFIX_SEARCH)
         {
             return entry;
         }
