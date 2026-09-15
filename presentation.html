@@ -1262,9 +1262,9 @@
         `<div class="diag"><svg viewBox="0 0 740 268">
 <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9" fill="none" stroke="#7db3ff" stroke-width="2"/></marker></defs>
 <g font-size="17" text-anchor="middle">
-<rect x="8" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="124" y="54" fill="#fff" font-weight="bold">108 × 31</text><text x="124" y="80" fill="#9fb0d8" font-size="13">detector crop · trim</text>
-<rect x="254" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="370" y="54" fill="#fff" font-weight="bold">245 × 60</text><text x="370" y="80" fill="#9fb0d8" font-size="13">2× double · upscale</text>
-<rect x="500" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7eca9c" stroke-width="2"/><text x="616" y="54" fill="#fff" font-weight="bold">253 × 68</text><text x="616" y="80" fill="#7eca9c" font-size="13">padded LSTM input</text>
+<rect x="8" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="124" y="54" fill="#fff" font-weight="bold">variable</text><text x="124" y="80" fill="#9fb0d8" font-size="13">crop · trim 1-4px</text>
+<rect x="254" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="370" y="54" fill="#fff" font-weight="bold">conditional 2×</text><text x="370" y="80" fill="#9fb0d8" font-size="13">if h&lt;50 INTER_LINEAR</text>
+<rect x="500" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7eca9c" stroke-width="2"/><text x="616" y="54" fill="#fff" font-weight="bold">variable</text><text x="616" y="80" fill="#7eca9c" font-size="13">240×60 max4× + pad 4-12px</text>
 </g>
 <g stroke="#7db3ff" stroke-width="2" marker-end="url(#ar2)">
 <line x1="240" y1="64" x2="252" y2="64"/><line x1="486" y1="64" x2="498" y2="64"/>
@@ -1394,7 +1394,7 @@
 <text x="370" y="72" fill="#7db3ff" font-size="34" font-weight="bold">→</text>
 <rect x="442" y="14" width="290" height="92" rx="10" fill="url(#gOk)" stroke="#7eca9c" stroke-width="2"/><text x="587" y="48" fill="#7eca9c" font-size="13">AFTER</text><text x="587" y="74" fill="#fff" font-weight="bold">SN66XMZ · 66.8 · UK</text>
 </g>
-<text x="370" y="114" fill="#9fb0d8" font-size="12" text-anchor="middle">exact text, modest confidence · car_02 plate #1 at 0.97 · boards: all plates · blank: zero reads</text>
+<text x="370" y="114" fill="#9fb0d8" font-size="12" text-anchor="middle">exact text, modest confidence · blank frames: zero reads</text>
 </svg></div>
 <p class="take">Lower confidence, exact read.</p>`],
 
@@ -1422,8 +1422,8 @@
 <rect x="380" y="180" width="352" height="68" rx="10" fill="url(#gBox)" stroke="#4a5a94" stroke-width="2"/><text x="556" y="208" fill="#fff" font-weight="bold">Logger</text><text x="556" y="230" fill="#9fb0d8" font-size="13">JSONL audit</text>
 </g>
 <rect x="8" y="260" width="724" height="58" rx="10" fill="url(#gPanel)" stroke="#4a5a94"/>
-<text x="370" y="284" fill="#dbe2f5" font-size="13" text-anchor="middle">formats: Region enum + strict matchers. The OO shape is PlateFormat strategies, one per region</text>
-<text x="370" y="306" fill="#9fb0d8" font-size="13" text-anchor="middle">validator tries strategies in order · same verdicts · open for extension, closed for modification</text>
+<text x="370" y="284" fill="#dbe2f5" font-size="13" text-anchor="middle">formats: Region enum + strict matchers. EU decides validity; US/UK only refine region label</text>
+<text x="370" y="306" fill="#9fb0d8" font-size="13" text-anchor="middle">same verdicts · enum smaller for 3 regions</text>
 </svg></div>
 <p class="take">Six classes, one orchestrator.</p>`],
 
@@ -1538,7 +1538,7 @@
     <text x="186" y="94" fill="#dbe2f5" font-size="13">gray = cv::cvtColor(color, CV_RGB2GRAY)</text>
     <text x="186" y="108" fill="#9fb0d8" font-size="12">Mat header borrows pixel data, no copy</text>
     <text x="186" y="128" fill="#dbe2f5" font-size="13">bilateralFilter(gray, smooth, 7, 75, 75)</text>
-    <text x="186" y="142" fill="#9fb0d8" font-size="12">5×5 separable kernel ≈ matrix convolution</text>
+    <text x="186" y="142" fill="#9fb0d8" font-size="12">edge-preserving non-linear, not separable</text>
     <text x="186" y="162" fill="#dbe2f5" font-size="13">Canny(smooth, edges, 40, 120)</text>
     <text x="186" y="176" fill="#9fb0d8" font-size="12">gradient magnitude + non-max suppression</text>
     <text x="186" y="192" fill="#9fb0d8" font-size="12">morphologyEx(edges, close, kernel)</text>
@@ -1549,7 +1549,7 @@
     <text x="554" y="74" fill="#fff" font-size="16" font-weight="bold">OCR · PlateOCR.cpp</text>
     <text x="554" y="100" fill="#dbe2f5" font-size="13">prepareRoi: crop → 2× upscale → adapt → pad</text>
     <text x="554" y="116" fill="#9fb0d8" font-size="12">resize(cropped, scaled, 2.0, INTER_LINEAR)</text>
-    <text x="554" y="132" fill="#dbe2f5" font-size="13">resize(scaled, scaled, 4×, INTER_CUBIC)</text>
+    <text x="554" y="132" fill="#dbe2f5" font-size="13">resize(scaled, scaled, adaptive max4×, INTER_CUBIC)</text>
     <text x="554" y="148" fill="#9fb0d8" font-size="12">copyMakeBorder(pad, pad, pad, pad, BLACK)</text>
     <text x="554" y="172" fill="#dbe2f5" font-size="13">tesseract::TessBaseAPI → Mat header via SetImage</text>
     <text x="554" y="188" fill="#9fb0d8" font-size="12">data, cols, rows, channels, step → LSTM input</text>
