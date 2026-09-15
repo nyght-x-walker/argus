@@ -1,317 +1,1229 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Argus · Live Presentation (exact copy of the app + visual slides)</title>
-<style>
-:root{--bg:#1e1e1e;--win:#2b2b2b;--child:#323232;--border:#3e3e3e;--text:#d6d6d6;
---muted:#9a9a9a;--accent:#5794f2;--ok:#7eca9c;--warn:#e5b567;--danger:#e06c5b}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:12px/1.45 Consolas,Menlo,monospace;
-height:100vh;display:flex;flex-direction:column;user-select:none}
-.menubar{height:28px;background:var(--win);border-bottom:1px solid var(--border);
-display:flex;align-items:center;padding:0 8px;gap:12px;flex-shrink:0}
-.menubar b{color:#fff}.menubar span{color:var(--muted)}
-.menubar .right{margin-left:auto;display:flex;gap:8px;align-items:center}
-.chip{border:1px solid var(--border);background:var(--child);padding:1px 6px;font-size:11px}
-.dock{flex:1;display:grid;grid-template-columns:210px 1fr 320px;grid-template-rows:1fr 190px;
-grid-template-areas:"left view right" "bottom bottom bottom";min-height:0}
-.panel{background:var(--win);border:1px solid var(--border);margin:4px;display:flex;
-flex-direction:column;min-height:0;min-width:0}
-.panel>.title{background:#252525;border-bottom:1px solid var(--border);padding:4px 8px;
-font-weight:bold;color:#fff;display:flex;justify-content:space-between;align-items:center}
-.panel>.body{padding:6px;overflow:auto;flex:1}
-#p-left{grid-area:left}#p-view{grid-area:view}#p-right{grid-area:right}#p-bottom{grid-area:bottom}
-.stage{display:grid;grid-template-columns:14px 1fr auto;gap:6px;align-items:center;padding:4px 6px;
-background:var(--child);border:1px solid var(--border);margin-bottom:4px}
-.led{width:8px;height:8px;border-radius:50%;background:#555}
-.led.ok{background:var(--ok)}
-.stage small{color:var(--muted);display:block}
-button{background:var(--child);color:var(--text);border:1px solid var(--border);
-font:inherit;padding:4px 8px;border-radius:3px;cursor:pointer}
-button:hover{border-color:var(--accent)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:bold}
-button.danger{background:#5a2b26;border-color:var(--danger);color:#fff}
-.row{display:flex;justify-content:space-between;padding:2px 0}
-.row span:first-child{color:var(--muted)}
-.viewport{flex:1;background:#0f0f0f;position:relative;overflow:hidden;border:1px solid #000;
-display:flex;align-items:center;justify-content:center;min-height:260px}
-.viewport img{max-width:100%;max-height:100%;object-fit:contain;opacity:.95}
-.bbox{position:absolute;border:2px solid var(--ok);background:rgba(126,202,156,.15);pointer-events:none}
-.bbox.flagged{border-color:var(--danger);background:rgba(224,108,91,.18)}
-.bbox span{position:absolute;top:-18px;left:0;background:#000;color:#fff;font-size:11px;
-padding:1px 5px;white-space:nowrap}
-.gl-overlay{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.78);border:1px solid #444;
-padding:5px 7px;font-size:11px}
-.gl-overlay b{color:var(--accent)}
-.toolbar{display:flex;gap:4px;padding:6px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center}
-details{background:var(--child);border:1px solid var(--border);margin-bottom:6px}
-details summary{padding:5px 8px;cursor:pointer;color:#fff;background:#2e2e2e}
-details .in{padding:6px 8px}
-.perchar{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
-.perchar i{font-style:normal;border:1px solid var(--border);padding:1px 4px;background:#252525}
-.perchar i.lo{border-color:var(--warn);color:var(--warn)}
-table{width:100%;border-collapse:collapse;font-size:11px}
-th{color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)}
-td{padding:4px 6px;border-bottom:1px solid #333}
-tr.flagged td{background:rgba(224,108,91,.12)}
-tr.warn td{background:rgba(229,181,103,.08)}
-.tabs{display:flex;gap:2px}
-.tabs button{border-radius:3px 3px 0 0}
-.tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.console{font-size:11px;white-space:pre-wrap}
-.console .ok{color:var(--ok)}.console .warn{color:var(--warn)}
-.note{border:1px dashed #555;padding:6px;color:var(--muted);font-size:11px;margin-bottom:6px}
-kbd{border:1px solid var(--border);background:#181818;padding:0 4px;border-radius:3px}
-/* clickable presentation zones */
-.zone{position:relative;cursor:pointer}
-.zone:hover{outline:2px solid var(--accent);outline-offset:-2px}
-.badge{position:absolute;top:2px;right:4px;z-index:5;background:var(--accent);color:#fff;
-font-size:10px;font-weight:bold;border-radius:50%;width:16px;height:16px;line-height:16px;text-align:center}
-/* slide pages: big, bright, presentational. Deliberately not the app look. */
-.modal{position:fixed;inset:0;background:rgba(4,6,12,.82);backdrop-filter:blur(3px);display:flex;align-items:center;
-justify-content:center;z-index:50}
-.modal .box{width:min(1140px,96vw);height:min(880px,93vh);overflow:hidden;background:linear-gradient(160deg,#151b2e 0%,#1b2340 55%,#232a4d 100%);
-border:1px solid #3d4a7a;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(87,148,242,.15),0 0 60px rgba(87,148,242,.12);
-display:flex;flex-direction:column;font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif}
-.slide-progress{height:5px;background:#0d1226;flex-shrink:0}
-.slide-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5794f2,#9d7bff,#e06c5b);transition:width .3s}
-.slide-head{padding:26px 36px 0;flex-shrink:0}
-.slide-kicker{font-size:12px;letter-spacing:3px;color:#8fa3d8;font-weight:700}
-.slide-head h3{margin:6px 0 0;font-size:34px;line-height:1.15;color:#fff;font-weight:800;letter-spacing:-.5px}
-.slide-head h3 .grad{background:linear-gradient(90deg,#7db3ff,#c4a8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.slide-rule{height:3px;width:120px;margin-top:12px;background:linear-gradient(90deg,#5794f2,#9d7bff);border-radius:2px}
-.modal .box .c{padding:20px 36px;overflow:auto;flex:1;font-size:15.5px;line-height:1.7;color:#dbe2f5}
-.modal .box .c code{font-family:Consolas,Menlo,monospace;background:rgba(0,0,0,.45);border:1px solid #3d4a7a;padding:1px 7px;border-radius:5px;color:#8fe3ae;font-size:13.5px}
-.modal .nav{display:flex;gap:10px;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid #2c3557;background:rgba(0,0,0,.25);flex-shrink:0}
-.modal .nav button{background:#232c4e;border:1px solid #3d4a7a;color:#dbe2f5;font-size:14px;padding:8px 18px;border-radius:8px}
-.modal .nav button:hover{border-color:var(--accent);background:#2b3763}
-.modal .nav .dots{display:flex;gap:7px}
-.modal .nav .dots i{width:11px;height:11px;border-radius:50%;background:#3a4670;cursor:pointer;transition:transform .15s}
-.modal .nav .dots i:hover{transform:scale(1.3)}
-.modal .nav .dots i.on{background:linear-gradient(135deg,#5794f2,#9d7bff);box-shadow:0 0 8px rgba(125,179,255,.8)}
-#slideCount{color:#8fa3d8;font-size:13px;letter-spacing:1px}
-.hidden{display:none!important}
-.hintbar{background:#252525;border-bottom:1px solid var(--border);color:var(--muted);
-padding:3px 8px;font-size:11px}
-.hintbar b{color:var(--accent)}
-/* slide visuals: large, high-contrast, nothing like the app panels */
-.diag{background:linear-gradient(180deg,rgba(10,14,30,.85),rgba(16,22,44,.85));border:1px solid #3d4a7a;border-radius:12px;padding:18px;margin:14px 0;
-box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 30px rgba(0,0,0,.35)}
-.diag svg{display:block;width:100%;height:auto}
-.diag text{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
-.diag .mono{font-family:Consolas,Menlo,monospace}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
-.kpi{background:linear-gradient(165deg,#232c4e,#1a2140);border:1px solid #3d4a7a;border-radius:12px;padding:18px 10px;text-align:center;
-box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.kpi b{display:block;font-size:36px;color:#fff;font-weight:800;letter-spacing:-1px}
-.kpi.g b{color:#7eca9c}.kpi.a b{color:#7db3ff}.kpi.w b{color:#e5b567}.kpi.r b{color:#e06c5b}
-.kpi small{color:#9fb0d8;font-size:13px}
-.stateline{background:rgba(0,0,0,.35);border:1px solid #3d4a7a;border-left:4px solid #5794f2;
-border-radius:8px;padding:12px 16px;margin:10px 0;font-size:14px;color:#dbe2f5}
-.footnote{color:#8fa3d8;font-size:12.5px;margin-top:8px;font-style:italic}
-.take{font-size:17px;color:#fff;text-align:center;margin:14px 6px 0;line-height:1.55}
-.take b{color:#7db3ff}
-/* overview page: the why behind the how */
-.why-hero{background:linear-gradient(135deg,#1c2a5e,#3a2a6e);border:1px solid #4a5a94;border-radius:12px;
-padding:26px 30px;margin:6px 0 16px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
-.why-hero p{margin:0;font-size:19px;color:#fff;line-height:1.5}
-.why-hero p b{color:#8fe3ae}
-.why-sec{font-size:12px;letter-spacing:3px;color:#8fa3d8;font-weight:700;margin:20px 0 10px}
-.why-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin:8px 0}
-.why-grid .wc{background:rgba(0,0,0,.35);border:1px solid #3d4a7a;border-radius:8px;padding:10px 14px;font-size:14px}
-.why-grid .wc:first-child{color:#fff;font-weight:700;border-left:4px solid #7db3ff}
-.why-grid .wc:last-child{color:#dbe2f5}
-.why-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:8px 0}
-.why-cards .wc{background:linear-gradient(165deg,#232c4e,#1a2140);border:1px solid #3d4a7a;border-radius:12px;padding:16px}
-.why-cards .wc b{display:block;font-size:16px;color:#fff;margin-bottom:6px}
-.why-cards .wc span{font-size:13.5px;color:#dbe2f5}
-#aboutClose{font-size:15px;padding:10px 26px;border-radius:8px}
-.why-meta{text-align:center;color:#9fb0d8;font-size:13.5px;letter-spacing:1px;margin:0 0 14px}
-.why-meta b{color:#fff}
-.why-brief{font-size:13px;letter-spacing:2.5px;color:#8fa3d8;font-weight:700;margin-bottom:10px}
-.why-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
-.why-stats .ws{background:rgba(0,0,0,.35);border:1px solid #4a5a94;border-radius:10px;padding:12px 8px;text-align:center}
-.why-stats .ws b{display:block;font-size:32px;color:#fff;font-weight:800;letter-spacing:-1px}
-.why-stats .ws.g b{color:#7eca9c}.why-stats .ws.a b{color:#7db3ff}
-.why-stats .ws small{color:#9fb0d8;font-size:12.5px}
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-.chips .chipc{background:linear-gradient(180deg,#2a3560,#20264a);border:1px solid #4a5a94;border-radius:10px;padding:10px 8px;text-align:center;min-width:72px;
-box-shadow:0 6px 16px rgba(0,0,0,.35)}
-.chips .chipc b{display:block;font-size:24px;color:#fff}
-.chips .chipc .bar{height:8px;background:#0d1226;border-radius:4px;margin-top:8px;overflow:hidden}
-.chips .chipc .bar i{display:block;height:100%;background:linear-gradient(90deg,#5794f2,#7eca9c);border-radius:4px}
-.chips .chipc.lo{border-color:#8a6d2f}
-.chips .chipc.lo .bar i{background:linear-gradient(90deg,#e5b567,#e06c5b)}
-pre.json{background:#0b0f22;border:1px solid #3d4a7a;border-radius:10px;padding:16px 18px;font-size:13.5px;overflow:auto;color:#dbe2f5;
-font-family:Consolas,Menlo,monospace;box-shadow:inset 0 2px 12px rgba(0,0,0,.5)}
-pre.json .k{color:#7db3ff}pre.json .s{color:#8fe3ae}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus · Live Presentation (exact copy of the app + visual slides)</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --win: #2b2b2b;
+      --child: #323232;
+      --border: #3e3e3e;
+      --text: #d6d6d6;
+      --muted: #9a9a9a;
+      --accent: #5794f2;
+      --ok: #7eca9c;
+      --warn: #e5b567;
+      --danger: #e06c5b
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.45 Consolas, Menlo, monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none
+    }
+
+    .menubar {
+      height: 28px;
+      background: var(--win);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 12px;
+      flex-shrink: 0
+    }
+
+    .menubar b {
+      color: #fff
+    }
+
+    .menubar span {
+      color: var(--muted)
+    }
+
+    .menubar .right {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: var(--child);
+      padding: 1px 6px;
+      font-size: 11px
+    }
+
+    .dock {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 210px 1fr 320px;
+      grid-template-rows: 1fr 190px;
+      grid-template-areas: "left view right" "bottom bottom bottom";
+      min-height: 0
+    }
+
+    .panel {
+      background: var(--win);
+      border: 1px solid var(--border);
+      margin: 4px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0
+    }
+
+    .panel>.title {
+      background: #252525;
+      border-bottom: 1px solid var(--border);
+      padding: 4px 8px;
+      font-weight: bold;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .panel>.body {
+      padding: 6px;
+      overflow: auto;
+      flex: 1
+    }
+
+    #p-left {
+      grid-area: left
+    }
+
+    #p-view {
+      grid-area: view
+    }
+
+    #p-right {
+      grid-area: right
+    }
+
+    #p-bottom {
+      grid-area: bottom
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 14px 1fr auto;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--child);
+      border: 1px solid var(--border);
+      margin-bottom: 4px
+    }
+
+    .led {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #555
+    }
+
+    .led.ok {
+      background: var(--ok)
+    }
+
+    .stage small {
+      color: var(--muted);
+      display: block
+    }
+
+    button {
+      background: var(--child);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font: inherit;
+      padding: 4px 8px;
+      border-radius: 3px;
+      cursor: pointer
+    }
+
+    button:hover {
+      border-color: var(--accent)
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: bold
+    }
+
+    button.danger {
+      background: #5a2b26;
+      border-color: var(--danger);
+      color: #fff
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0
+    }
+
+    .row span:first-child {
+      color: var(--muted)
+    }
+
+    .viewport {
+      flex: 1;
+      background: #0f0f0f;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 260px
+    }
+
+    .viewport img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      opacity: .95
+    }
+
+    .bbox {
+      position: absolute;
+      border: 2px solid var(--ok);
+      background: rgba(126, 202, 156, .15);
+      pointer-events: none
+    }
+
+    .bbox.flagged {
+      border-color: var(--danger);
+      background: rgba(224, 108, 91, .18)
+    }
+
+    .bbox span {
+      position: absolute;
+      top: -18px;
+      left: 0;
+      background: #000;
+      color: #fff;
+      font-size: 11px;
+      padding: 1px 5px;
+      white-space: nowrap
+    }
+
+    .gl-overlay {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0, 0, 0, .78);
+      border: 1px solid #444;
+      padding: 5px 7px;
+      font-size: 11px
+    }
+
+    .gl-overlay b {
+      color: var(--accent)
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 4px;
+      padding: 6px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    details {
+      background: var(--child);
+      border: 1px solid var(--border);
+      margin-bottom: 6px
+    }
+
+    details summary {
+      padding: 5px 8px;
+      cursor: pointer;
+      color: #fff;
+      background: #2e2e2e
+    }
+
+    details .in {
+      padding: 6px 8px
+    }
+
+    .perchar {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      margin-top: 4px
+    }
+
+    .perchar i {
+      font-style: normal;
+      border: 1px solid var(--border);
+      padding: 1px 4px;
+      background: #252525
+    }
+
+    .perchar i.lo {
+      border-color: var(--warn);
+      color: var(--warn)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px
+    }
+
+    th {
+      color: var(--muted);
+      text-align: left;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #333
+    }
+
+    tr.flagged td {
+      background: rgba(224, 108, 91, .12)
+    }
+
+    tr.warn td {
+      background: rgba(229, 181, 103, .08)
+    }
+
+    .tabs {
+      display: flex;
+      gap: 2px
+    }
+
+    .tabs button {
+      border-radius: 3px 3px 0 0
+    }
+
+    .tabs button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent)
+    }
+
+    .console {
+      font-size: 11px;
+      white-space: pre-wrap
+    }
+
+    .console .ok {
+      color: var(--ok)
+    }
+
+    .console .warn {
+      color: var(--warn)
+    }
+
+    .note {
+      border: 1px dashed #555;
+      padding: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 6px
+    }
+
+    kbd {
+      border: 1px solid var(--border);
+      background: #181818;
+      padding: 0 4px;
+      border-radius: 3px
+    }
+
+    /* clickable presentation zones */
+    .zone {
+      position: relative;
+      cursor: pointer
+    }
+
+    .zone:hover {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px
+    }
+
+    .badge {
+      position: absolute;
+      top: 2px;
+      right: 4px;
+      z-index: 5;
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: bold;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center
+    }
+
+    /* slide pages: big, bright, presentational. Deliberately not the app look. */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 6, 12, .82);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50
+    }
+
+    .modal .box {
+      width: min(1140px, 96vw);
+      height: min(880px, 93vh);
+      overflow: hidden;
+      background: linear-gradient(160deg, #151b2e 0%, #1b2340 55%, #232a4d 100%);
+      border: 1px solid #3d4a7a;
+      border-radius: 14px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 0 1px rgba(87, 148, 242, .15), 0 0 60px rgba(87, 148, 242, .12);
+      display: flex;
+      flex-direction: column;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif
+    }
+
+    .slide-progress {
+      height: 5px;
+      background: #0d1226;
+      flex-shrink: 0
+    }
+
+    .slide-progress i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #5794f2, #9d7bff, #e06c5b);
+      transition: width .3s
+    }
+
+    .slide-head {
+      padding: 26px 36px 0;
+      flex-shrink: 0
+    }
+
+    .slide-kicker {
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #8fa3d8;
+      font-weight: 700
+    }
+
+    .slide-head h3 {
+      margin: 6px 0 0;
+      font-size: 34px;
+      line-height: 1.15;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -.5px
+    }
+
+    .slide-head h3 .grad {
+      background: linear-gradient(90deg, #7db3ff, #c4a8ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent
+    }
+
+    .slide-rule {
+      height: 3px;
+      width: 120px;
+      margin-top: 12px;
+      background: linear-gradient(90deg, #5794f2, #9d7bff);
+      border-radius: 2px
+    }
+
+    .modal .box .c {
+      padding: 20px 36px;
+      overflow: auto;
+      flex: 1;
+      font-size: 15.5px;
+      line-height: 1.7;
+      color: #dbe2f5
+    }
+
+    .modal .box .c code {
+      font-family: Consolas, Menlo, monospace;
+      background: rgba(0, 0, 0, .45);
+      border: 1px solid #3d4a7a;
+      padding: 1px 7px;
+      border-radius: 5px;
+      color: #8fe3ae;
+      font-size: 13.5px
+    }
+
+    .modal .nav {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      border-top: 1px solid #2c3557;
+      background: rgba(0, 0, 0, .25);
+      flex-shrink: 0
+    }
+
+    .modal .nav button {
+      background: #232c4e;
+      border: 1px solid #3d4a7a;
+      color: #dbe2f5;
+      font-size: 14px;
+      padding: 8px 18px;
+      border-radius: 8px
+    }
+
+    .modal .nav button:hover {
+      border-color: var(--accent);
+      background: #2b3763
+    }
+
+    .modal .nav .dots {
+      display: flex;
+      gap: 7px
+    }
+
+    .modal .nav .dots i {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #3a4670;
+      cursor: pointer;
+      transition: transform .15s
+    }
+
+    .modal .nav .dots i:hover {
+      transform: scale(1.3)
+    }
+
+    .modal .nav .dots i.on {
+      background: linear-gradient(135deg, #5794f2, #9d7bff);
+      box-shadow: 0 0 8px rgba(125, 179, 255, .8)
+    }
+
+    #slideCount {
+      color: #8fa3d8;
+      font-size: 13px;
+      letter-spacing: 1px
+    }
+
+    .hidden {
+      display: none !important
+    }
+
+    .hintbar {
+      background: #252525;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 8px;
+      font-size: 11px
+    }
+
+    .hintbar b {
+      color: var(--accent)
+    }
+
+    /* slide visuals: large, high-contrast, nothing like the app panels */
+    .diag {
+      background: linear-gradient(180deg, rgba(10, 14, 30, .85), rgba(16, 22, 44, .85));
+      border: 1px solid #3d4a7a;
+      border-radius: 12px;
+      padding: 18px;
+      margin: 14px 0;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 10px 30px rgba(0, 0, 0, .35)
+    }
+
+    .diag svg {
+      display: block;
+      width: 100%;
+      height: auto
+    }
+
+    .diag text {
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif
+    }
+
+    .diag .mono {
+      font-family: Consolas, Menlo, monospace
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 14px 0
+    }
+
+    .kpi {
+      background: linear-gradient(165deg, #232c4e, #1a2140);
+      border: 1px solid #3d4a7a;
+      border-radius: 12px;
+      padding: 18px 10px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .35)
+    }
+
+    .kpi b {
+      display: block;
+      font-size: 36px;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -1px
+    }
+
+    .kpi.g b {
+      color: #7eca9c
+    }
+
+    .kpi.a b {
+      color: #7db3ff
+    }
+
+    .kpi.w b {
+      color: #e5b567
+    }
+
+    .kpi.r b {
+      color: #e06c5b
+    }
+
+    .kpi small {
+      color: #9fb0d8;
+      font-size: 13px
+    }
+
+    .stateline {
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid #3d4a7a;
+      border-left: 4px solid #5794f2;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 10px 0;
+      font-size: 14px;
+      color: #dbe2f5
+    }
+
+    .footnote {
+      color: #8fa3d8;
+      font-size: 12.5px;
+      margin-top: 8px;
+      font-style: italic
+    }
+
+    .take {
+      font-size: 18px;
+      color: #fff;
+      text-align: center;
+      margin: 18px 6px 0;
+      line-height: 1.5;
+      font-weight: 500
+    }
+
+    /* overview page: the why behind the how */
+    .why-hero {
+      background: linear-gradient(135deg, #1c2a5e, #3a2a6e);
+      border: 1px solid #4a5a94;
+      border-radius: 12px;
+      padding: 26px 30px;
+      margin: 6px 0 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .4)
+    }
+
+    .why-hero p {
+      margin: 0 0 12px;
+      font-size: 19px;
+      color: #fff;
+      line-height: 1.5
+    }
+
+    .why-hero p:last-of-type {
+      margin-bottom: 18px
+    }
+
+    .why-hero p b {
+      color: #8fe3ae
+    }
+
+    .why-sec {
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #8fa3d8;
+      font-weight: 700;
+      margin: 20px 0 10px
+    }
+
+    .why-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 8px;
+      margin: 8px 0
+    }
+
+    .why-grid .wc {
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid #3d4a7a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px
+    }
+
+    .why-grid .wc:first-child {
+      color: #fff;
+      font-weight: 700;
+      border-left: 4px solid #7db3ff
+    }
+
+    .why-grid .wc:last-child {
+      color: #dbe2f5
+    }
+
+    .why-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 8px 0
+    }
+
+    .why-cards .wc {
+      background: linear-gradient(165deg, #232c4e, #1a2140);
+      border: 1px solid #3d4a7a;
+      border-radius: 12px;
+      padding: 16px
+    }
+
+    .why-cards .wc b {
+      display: block;
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 6px
+    }
+
+    .why-cards .wc span {
+      font-size: 13.5px;
+      color: #dbe2f5
+    }
+
+    #aboutClose {
+      font-size: 15px;
+      padding: 10px 26px;
+      border-radius: 8px
+    }
+
+    .why-meta {
+      text-align: center;
+      color: #9fb0d8;
+      font-size: 13.5px;
+      letter-spacing: 1px;
+      margin: 0 0 14px
+    }
+
+    .why-meta b {
+      color: #fff
+    }
+
+    .why-brief {
+      font-size: 13px;
+      letter-spacing: 2.5px;
+      color: #8fa3d8;
+      font-weight: 700;
+      margin-bottom: 10px
+    }
+
+    .why-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 18px
+    }
+
+    .why-stats .ws {
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid #4a5a94;
+      border-radius: 10px;
+      padding: 12px 8px;
+      text-align: center
+    }
+
+    .why-stats .ws b {
+      display: block;
+      font-size: 32px;
+      color: #fff;
+      font-weight: 800;
+      letter-spacing: -1px
+    }
+
+    .why-stats .ws.g b {
+      color: #7eca9c
+    }
+
+    .why-stats .ws.a b {
+      color: #7db3ff
+    }
+
+    .why-stats .ws small {
+      color: #9fb0d8;
+      font-size: 12.5px
+    }
+
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 10px 0
+    }
+
+    .chips .chipc {
+      background: linear-gradient(180deg, #2a3560, #20264a);
+      border: 1px solid #4a5a94;
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      min-width: 72px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, .35)
+    }
+
+    .chips .chipc b {
+      display: block;
+      font-size: 24px;
+      color: #fff
+    }
+
+    .chips .chipc .bar {
+      height: 8px;
+      background: #0d1226;
+      border-radius: 4px;
+      margin-top: 8px;
+      overflow: hidden
+    }
+
+    .chips .chipc .bar i {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #5794f2, #7eca9c);
+      border-radius: 4px
+    }
+
+    .chips .chipc.lo {
+      border-color: #8a6d2f
+    }
+
+    .chips .chipc.lo .bar i {
+      background: linear-gradient(90deg, #e5b567, #e06c5b)
+    }
+
+    pre.json {
+      background: #0b0f22;
+      border: 1px solid #3d4a7a;
+      border-radius: 10px;
+      padding: 16px 18px;
+      font-size: 13.5px;
+      overflow: auto;
+      color: #dbe2f5;
+      font-family: Consolas, Menlo, monospace;
+      box-shadow: inset 0 2px 12px rgba(0, 0, 0, .5)
+    }
+
+    pre.json .k {
+      color: #7db3ff
+    }
+
+    pre.json .s {
+      color: #8fe3ae
+    }
+  </style>
 </head>
+
 <body>
-<svg width="0" height="0" style="position:absolute"><defs>
-<linearGradient id="gBox" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3763"/><stop offset="1" stop-color="#1d2547"/></linearGradient>
-<linearGradient id="gPanel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10173a"/><stop offset="1" stop-color="#0b1028"/></linearGradient>
-<linearGradient id="gOk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2c5b40"/><stop offset="1" stop-color="#1d3a2b"/></linearGradient>
-<linearGradient id="gBad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6e2f27"/><stop offset="1" stop-color="#471e19"/></linearGradient>
-</defs></svg>
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="gBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2b3763" />
+        <stop offset="1" stop-color="#1d2547" />
+      </linearGradient>
+      <linearGradient id="gPanel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#10173a" />
+        <stop offset="1" stop-color="#0b1028" />
+      </linearGradient>
+      <linearGradient id="gOk" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#2c5b40" />
+        <stop offset="1" stop-color="#1d3a2b" />
+      </linearGradient>
+      <linearGradient id="gBad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#6e2f27" />
+        <stop offset="1" stop-color="#471e19" />
+      </linearGradient>
+    </defs>
+  </svg>
 
-<div class="menubar"><b>Argus</b><span>ofApp · 60fps · ofxImGui · OF 0.12</span>
-<div class="right"><span class="chip" id="fps">60 fps</span></div></div>
-<div class="hintbar"><button id="btnWhy" style="padding:1px 10px">★ Why Argus · Scope · Ethics</button> · <button id="btnArch" style="padding:1px 10px">▦ Architecture</button> · <button id="btnMem" style="padding:1px 10px">◍ Memory</button> · click any numbered panel for its slide · <kbd>←</kbd><kbd>→</kbd> move · <kbd>Esc</kbd> close</div>
+  <div class="menubar"><b>Argus</b><span>ofApp · 60fps · ofxImGui · OF 0.12</span>
+    <div class="right"><span class="chip" id="fps">60 fps</span></div>
+  </div>
+  <div class="hintbar"><button id="btnWhy" style="padding:1px 10px">★ Why Argus · Scope · Ethics</button> · <button
+      id="btnArch" style="padding:1px 10px">▦ Architecture</button> · <button id="btnMem" style="padding:1px 10px">◍
+      Memory</button> · <button id="btnTimeline" style="padding:1px 10px">⏱ Timeline</button> · click any numbered panel
+    for its slide · <kbd>←</kbd><kbd>→</kbd> move · <kbd>Esc</kbd> close</div>
 
-<div class="dock">
-<div class="panel" id="p-left"><div class="title"><span>Pipeline · ofApp::update()</span><span>●</span></div>
-<div class="body"><div class="zone" data-slide="0"><span class="badge">1</span>
-<div class="note">Single OF window. Pipeline runs in update(), draws in draw(). No page router.</div>
-<div id="stages"></div></div>
-<div class="row"><span>Confidence thr</span><b>0.72</b></div>
-<div style="display:flex;gap:4px;margin-top:6px">
-<button class="primary" style="flex:1">▶ Run (R)</button>
-<button id="btnBatch" style="flex:1">Batch 10</button></div>
-<div style="display:flex;gap:4px;margin-top:4px">
-<button>Load Media (O)</button><button>Sample</button></div>
-<div class="row"><span>Media</span><span>car_01.jpg</span></div>
-<div style="display:flex;gap:4px;margin-top:4px">
-<button>Process Frame</button><button>OCR fail</button></div>
-<div class="row" style="margin-top:6px"><span>Loaded</span><span>4 imgs · 0 vid</span></div>
-<div class="row"><span>Video buf</span><span>24 frames · double-buffer</span></div>
-</div></div>
+  <div class="dock">
+    <div class="panel" id="p-left">
+      <div class="title"><span>Pipeline · ofApp::update()</span><span>●</span></div>
+      <div class="body">
+        <div class="zone" data-slide="0"><span class="badge">1</span>
+          <div class="note">Single OF window. Pipeline runs in update(), draws in draw(). No page router.</div>
+          <div id="stages"></div>
+        </div>
+        <div class="row"><span>Confidence thr</span><b>0.72</b></div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button class="primary" style="flex:1">▶ Run (R)</button>
+          <button id="btnBatch" style="flex:1">Batch 10</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button>Load Media (O)</button><button>Sample</button>
+        </div>
+        <div class="row"><span>Media</span><span>car_01.jpg</span></div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button>Process Frame</button><button>OCR fail</button>
+        </div>
+        <div class="row" style="margin-top:6px"><span>Loaded</span><span>4 imgs · 0 vid</span></div>
+        <div class="row"><span>Video buf</span><span>24 frames · double-buffer</span></div>
+      </div>
+    </div>
 
-<div class="panel" id="p-view"><div class="title"><span>Viewport · ofApp::draw() · car_01.jpg 612×408</span><span>ROI x:231 y:191 w:108 h:31</span></div>
-<div class="body" style="display:flex;flex-direction:column">
-<div class="viewport"><div class="zone" data-slide="1" style="position:absolute;inset:0"><span class="badge">2</span></div>
-<img src="Argus/resources/images/car_01.jpg" alt="viewport">
-<div class="bbox flagged" style="left:37.7%;top:46.8%;width:17.6%;height:7.6%"><span>SN66XMZ · 67%</span></div>
-<div class="bbox" style="left:88.4%;top:53.9%;width:9.3%;height:4.2%"><span>72%</span></div>
-<div class="bbox" style="left:66.2%;top:38.7%;width:8%;height:3.4%"><span>68%</span></div>
-<div class="bbox" style="left:15.5%;top:9.6%;width:7.8%;height:3.4%"><span>64%</span></div>
-<div class="bbox" style="left:66.3%;top:41.2%;width:7.4%;height:2.9%"><span>64%</span></div>
-<div class="gl-overlay zone" data-slide="7">Plate: <b>SN66XMZ</b> [UK] ✓ norm<br>Conf: <b>66.8%</b><br>Valid: <span style="color:var(--ok)">✓ UK valid</span> · watchlist BLOCKED<span class="badge">6</span></div>
-</div>
-<div class="toolbar"><div class="zone" data-slide="8" style="display:flex;gap:4px;align-items:center"><span class="badge">9</span>
-<button>⏵ Play</button><button>Demo Flagged</button><button>Corrupt img</button>
-<span style="color:var(--muted)">☑ Show candidates</span>
-<span class="chip">612×408</span><span class="chip">0.7 MB</span>
-<span style="color:var(--muted)"><kbd>Space</kbd> play · seek · <kbd>R</kbd> re-run</span></div></div>
-</div></div>
+    <div class="panel" id="p-view">
+      <div class="title"><span>Viewport · ofApp::draw() · car_01.jpg 612×408</span><span>ROI x:231 y:191 w:108
+          h:31</span></div>
+      <div class="body" style="display:flex;flex-direction:column">
+        <div class="viewport">
+          <div class="zone" data-slide="1" style="position:absolute;inset:0"><span class="badge">2</span></div>
+          <img src="Argus/resources/images/car_01.jpg" alt="viewport">
+          <div class="bbox flagged" style="left:37.7%;top:46.8%;width:17.6%;height:7.6%"><span>SN66XMZ · 67%</span>
+          </div>
+          <div class="bbox" style="left:88.4%;top:53.9%;width:9.3%;height:4.2%"><span>72%</span></div>
+          <div class="bbox" style="left:66.2%;top:38.7%;width:8%;height:3.4%"><span>68%</span></div>
+          <div class="bbox" style="left:15.5%;top:9.6%;width:7.8%;height:3.4%"><span>64%</span></div>
+          <div class="bbox" style="left:66.3%;top:41.2%;width:7.4%;height:2.9%"><span>64%</span></div>
+          <div class="gl-overlay zone" data-slide="7">Plate: <b>SN66XMZ</b> [UK] ✓ norm<br>Conf: <b>66.8%</b><br>Valid:
+            <span style="color:var(--ok)">✓ UK valid</span> · watchlist BLOCKED<span class="badge">8</span>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="zone" data-slide="8" style="display:flex;gap:4px;align-items:center"><span class="badge">9</span>
+            <button>⏵ Play</button><button>Demo Flagged</button><button>Corrupt img</button>
+            <span style="color:var(--muted)">☑ Show candidates</span>
+            <span class="chip">612×408</span><span class="chip">0.7 MB</span>
+            <span style="color:var(--muted)"><kbd>Space</kbd> play · seek · <kbd>R</kbd> re-run</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<div class="panel" id="p-right"><div class="title"><span>Inspector · ofxImGui</span><span>draw() overlay</span></div>
-<div class="body">
-<details open><summary>Match Info</summary><div class="in"><div class="zone" data-slide="4"><span class="badge">8</span>
-<div class="row"><span>Plate 1/4</span><span><button>Prev</button> <button>Next</button></span></div>
-<div class="row"><span>Watchlist</span><b style="color:var(--ok)">YES</b></div>
-<div class="row"><span>Flag type</span><span>Blocked</span></div>
-<div class="row"><span>Reason</span><span>Demo stolen - test vehicle</span></div></div>
-<div class="row"><span>Detection candidates</span><span>5</span></div>
-<div class="row"><span>Detected plate (raw)</span><span>SN66XMZ</span></div>
-<div class="zone" data-slide="3"><span class="badge">4</span>
-<div class="row"><span>Normalized</span><span>SN66XMZ</span></div>
-<div class="row"><span>Valid</span><span style="color:var(--ok)">Yes</span></div>
-<div class="row"><span>Region</span><span>UK</span></div></div>
-</div></details>
-<details open><summary>OCR · per-char (Tess 5.5)</summary><div class="in"><div class="zone" data-slide="2"><span class="badge">3</span>
-<div class="perchar"><i>S 89%</i><i>N 99%</i><i class="lo">6 58%</i><i class="lo">6 55%</i><i class="lo">X 41%</i><i>M 99%</i><i>Z 68%</i></div>
-<div class="row" style="margin-top:4px"><span>Mean</span><b>66.8%</b></div></div>
-</div></details>
-<details open><summary>Decision + Operator notes</summary><div class="in"><div class="zone" data-slide="6"><span class="badge">7</span>
-<div style="display:flex;gap:4px"><button class="primary" style="flex:1">Allow</button>
-<button class="danger" style="flex:1">Block</button><button style="flex:1">Review</button></div>
-<button class="primary" style="width:100%;margin-top:6px">Save Decision &amp; Log (Enter)</button></div>
-</div></details>
-<details><summary>Memory (this view)</summary><div class="in">
-<div class="row"><span>Image</span><span>0.7 MB</span></div>
-<div class="row"><span>Decoded mat</span><span>0.7 MB</span></div>
-<div class="row"><span>Video cache</span><span>0 MB</span></div>
-<button style="width:100%;margin-top:4px">Purge caches</button></div></details>
-<details><summary>Flag editor</summary><div class="in"><button style="width:100%">Add and Edit flagged</button></div></details>
-</div></div>
+    <div class="panel" id="p-right">
+      <div class="title"><span>Inspector · ofxImGui</span><span>draw() overlay</span></div>
+      <div class="body">
+        <details open>
+          <summary>Match Info</summary>
+          <div class="in">
+            <div>
+              <div class="row"><span>Plate 1/4</span><span><button>Prev</button> <button>Next</button></span></div>
+              <div class="row"><span>Watchlist</span><b style="color:var(--ok)">YES</b></div>
+              <div class="row"><span>Flag type</span><span>Blocked</span></div>
+              <div class="row"><span>Reason</span><span>Demo stolen - test vehicle</span></div>
+            </div>
+            <div class="row"><span>Detection candidates</span><span>5</span></div>
+            <div class="row"><span>Detected plate (raw)</span><span>SN66XMZ</span></div>
+            <div class="zone" data-slide="3"><span class="badge">4</span>
+              <div class="row"><span>Normalized</span><span>SN66XMZ</span></div>
+              <div class="row"><span>Valid</span><span style="color:var(--ok)">Yes</span></div>
+              <div class="row"><span>Region</span><span>UK</span></div>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>OCR · per-char (Tess 5.5)</summary>
+          <div class="in">
+            <div class="zone" data-slide="2"><span class="badge">3</span>
+              <div class="perchar"><i>S 89%</i><i>N 99%</i><i class="lo">6 58%</i><i class="lo">6 55%</i><i class="lo">X
+                  41%</i><i>M 99%</i><i>Z 68%</i></div>
+              <div class="row" style="margin-top:4px"><span>Mean</span><b>66.8%</b></div>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>Decision + Operator notes</summary>
+          <div class="in">
+            <div class="zone" data-slide="6"><span class="badge">7</span>
+              <div style="display:flex;gap:4px"><button class="primary" style="flex:1">Allow</button>
+                <button class="danger" style="flex:1">Block</button><button style="flex:1">Review</button>
+              </div>
+              <button class="primary" style="width:100%;margin-top:6px">Save Decision &amp; Log (Enter)</button>
+            </div>
+          </div>
+        </details>
+        <details>
+          <summary>Memory (this view)</summary>
+          <div class="in">
+            <div class="row"><span>Image</span><span>0.7 MB</span></div>
+            <div class="row"><span>Decoded mat</span><span>0.7 MB</span></div>
+            <div class="row"><span>Video cache</span><span>0 MB</span></div>
+            <button style="width:100%;margin-top:4px">Purge caches</button>
+          </div>
+        </details>
+        <details>
+          <summary>Flag editor</summary>
+          <div class="in"><button style="width:100%">Add and Edit flagged</button></div>
+        </details>
+      </div>
+    </div>
 
-<div class="panel" id="p-bottom"><div class="title"><div class="tabs">
-<button class="active" data-tab="console">Console · ofLog</button>
-<button data-tab="flagged">Flagged (6)</button>
-<button data-tab="logs">Logs &amp; Alerts</button>
-<button data-tab="mem">Memory</button></div></div>
-<div class="body">
-<div id="tab-console" class="console"><div class="zone" data-slide="9"><span class="badge">10</span>[14:32:07] [INFO] [PlateDetector] Found 5 candidate(s), 4 read(s)
-[14:32:07] [INFO] [PlateOCR] Recognized: 'SN66XMZ' mean 66.8
-[14:32:07] [INFO] [PlateValidator] Raw: 'SN66XMZ' -&gt; Normalized: 'SN66XMZ'
-[14:32:07] [INFO] [PlateValidator] Valid: yes Region: UK
-[14:32:07] [INFO] [FlagStore] Lookup 'SN66XMZ' -&gt; found
-[14:32:07] [INFO] <span class="ok">[Pipeline] img_01.jpg: candidates=5, reads=4 'SN66XMZ'(66.8,Y,Y)…</span>
-<span class="zone" data-slide="5"><span class="warn">[14:32:09] [WARNING] [AlertService] FLAGGED SN66XMZ - Blocked → alert triggered</span></span></div></div>
-<div id="tab-flagged" class="hidden"><div class="zone" data-slide="4"><span class="badge">5</span>
-<table><thead><tr><th>Plate</th><th>Type</th><th>Reason</th><th>Added</th><th>Status</th><th>Action</th></tr></thead><tbody>
-<tr class="flagged"><td><b>AB123CD</b></td><td>Blocked</td><td>Stolen - Metro PD</td><td>2024-01-10</td><td>Alert</td><td>Edit · Delete</td></tr>
-<tr class="warn"><td><b>XY987ZT</b></td><td>Suspicious</td><td>Restricted zone 3x</td><td>2024-01-12</td><td>Alert</td><td>Edit · Delete</td></tr>
-<tr><td><b>KL555MN</b></td><td>Authorized</td><td>Staff parking A</td><td>2023-11-01</td><td>Silent</td><td>Edit · Delete</td></tr>
-<tr class="flagged"><td><b>SN66XMZ</b></td><td>Blocked</td><td>Demo stolen - test vehicle</td><td>2026-09-11</td><td>Alert</td><td>Edit · Delete</td></tr>
-<tr class="warn"><td><b>RR296J</b></td><td>Suspicious</td><td>Demo event vehicle</td><td>2026-09-11</td><td>Alert</td><td>Edit · Delete</td></tr>
-<tr><td><b>R104TF</b></td><td>Authorized</td><td>Demo staff vehicle</td><td>2026-09-11</td><td>Silent</td><td>Edit · Delete</td></tr>
-</tbody></table></div></div>
-<div id="tab-logs" class="hidden"><div class="zone" data-slide="6"><span class="badge">11</span>
-<table><thead><tr><th>Time</th><th>Plate</th><th>Conf</th><th>Flag</th><th>Type</th><th>Decision</th><th>Op</th></tr></thead><tbody>
-<tr class="flagged"><td>14:32:07</td><td><b>SN66XMZ</b></td><td>66.8</td><td>YES</td><td>BLOCKED</td><td>Review</td><td>op_1</td></tr>
-<tr class="warn"><td>14:31:02</td><td><b>RR296</b></td><td>67.8</td><td>YES</td><td>SUSPICIOUS</td><td>Review</td><td>op_1</td></tr>
-</tbody></table></div></div>
-<div id="tab-mem" class="hidden"><div class="zone" data-slide="10"><span class="badge">12</span>
-<div class="row"><span>Process RSS</span><span>n/a (macOS)</span></div>
-<div class="row"><span>Image / Frame / ROI</span><span>0.7 / 0.0 / 0.0 MB</span></div>
-<div class="row"><span>Candidates / Reads / Votes / Tracks / Logs</span><span>5 / 4 / 0 / 0 / 1</span></div>
-<button>Clear caches</button></div></div>
-</div></div>
-</div>
+    <div class="panel" id="p-bottom">
+      <div class="title">
+        <div class="tabs">
+          <button class="active" data-tab="console">Console · ofLog</button>
+          <button data-tab="flagged">Flagged (6)</button>
+          <button data-tab="logs">Logs &amp; Alerts</button>
+          <button data-tab="mem">Memory</button>
+        </div>
+      </div>
+      <div class="body">
+        <div id="tab-console" class="console">
+          <div class="zone" data-slide="9"><span class="badge">10</span>[14:32:07] [INFO] [PlateDetector] Found 5
+            candidate(s), 4 read(s)
+            [14:32:07] [INFO] [PlateOCR] Recognized: 'SN66XMZ' mean 66.8
+            [14:32:07] [INFO] [PlateValidator] Raw: 'SN66XMZ' -&gt; Normalized: 'SN66XMZ'
+            [14:32:07] [INFO] [PlateValidator] Valid: yes Region: UK
+            [14:32:07] [INFO] [FlagStore] Lookup 'SN66XMZ' -&gt; found
+            [14:32:07] [INFO] <span class="ok">[Pipeline] img_01.jpg: candidates=5, reads=4 'SN66XMZ'(66.8,Y,Y)…</span>
+            <span class="zone" data-slide="5"><span class="badge">6</span><span class="warn">[14:32:09] [WARNING] [AlertService] FLAGGED SN66XMZ -
+                Blocked → alert triggered</span></span>
+          </div>
+        </div>
+        <div id="tab-flagged" class="hidden">
+          <div class="zone" data-slide="4"><span class="badge">5</span>
+            <table>
+              <thead>
+                <tr>
+                  <th>Plate</th>
+                  <th>Type</th>
+                  <th>Reason</th>
+                  <th>Added</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="flagged">
+                  <td><b>AB123CD</b></td>
+                  <td>Blocked</td>
+                  <td>Stolen - Metro PD</td>
+                  <td>2024-01-10</td>
+                  <td>Alert</td>
+                  <td>Edit · Delete</td>
+                </tr>
+                <tr class="warn">
+                  <td><b>XY987ZT</b></td>
+                  <td>Suspicious</td>
+                  <td>Restricted zone 3x</td>
+                  <td>2024-01-12</td>
+                  <td>Alert</td>
+                  <td>Edit · Delete</td>
+                </tr>
+                <tr>
+                  <td><b>KL555MN</b></td>
+                  <td>Authorized</td>
+                  <td>Staff parking A</td>
+                  <td>2023-11-01</td>
+                  <td>Silent</td>
+                  <td>Edit · Delete</td>
+                </tr>
+                <tr class="flagged">
+                  <td><b>SN66XMZ</b></td>
+                  <td>Blocked</td>
+                  <td>Demo stolen - test vehicle</td>
+                  <td>2026-09-11</td>
+                  <td>Alert</td>
+                  <td>Edit · Delete</td>
+                </tr>
+                <tr class="warn">
+                  <td><b>RR296J</b></td>
+                  <td>Suspicious</td>
+                  <td>Demo event vehicle</td>
+                  <td>2026-09-11</td>
+                  <td>Alert</td>
+                  <td>Edit · Delete</td>
+                </tr>
+                <tr>
+                  <td><b>R104TF</b></td>
+                  <td>Authorized</td>
+                  <td>Demo staff vehicle</td>
+                  <td>2026-09-11</td>
+                  <td>Silent</td>
+                  <td>Edit · Delete</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tab-logs" class="hidden">
+          <div class="zone" data-slide="6"><span class="badge">11</span>
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Plate</th>
+                  <th>Conf</th>
+                  <th>Flag</th>
+                  <th>Type</th>
+                  <th>Decision</th>
+                  <th>Op</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="flagged">
+                  <td>14:32:07</td>
+                  <td><b>SN66XMZ</b></td>
+                  <td>66.8</td>
+                  <td>YES</td>
+                  <td>BLOCKED</td>
+                  <td>Review</td>
+                  <td>op_1</td>
+                </tr>
+                <tr class="warn">
+                  <td>14:31:02</td>
+                  <td><b>RR296</b></td>
+                  <td>67.8</td>
+                  <td>YES</td>
+                  <td>SUSPICIOUS</td>
+                  <td>Review</td>
+                  <td>op_1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tab-mem" class="hidden">
+          <div class="zone" data-slide="10"><span class="badge">12</span>
+            <div class="zone" data-slide="11"><span class="badge">13</span></div>
+            <div class="zone" data-slide="12"><span class="badge">14</span></div>
+            <div class="zone" data-slide="13"><span class="badge">15</span></div>
+            <div class="zone" data-slide="14"><span class="badge">16</span></div>
+            <div class="row"><span>Process RSS</span><span>n/a (macOS)</span></div>
+            <div class="row"><span>Image / Frame / ROI</span><span>0.7 / 0.0 / 0.0 MB</span></div>
+            <div class="row"><span>Candidates / Reads / Votes / Tracks / Logs</span><span>5 / 4 / 0 / 0 / 1</span></div>
+            <button>Clear caches</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-<div id="aboutModal" class="modal hidden"><div class="box">
-<div class="slide-progress"><i style="width:100%"></i></div>
-<div class="slide-head"><div class="slide-kicker">ARGUS · THE FRAMING</div><h3><span class="grad">Why</span> this exists</h3><div class="slide-rule"></div></div>
-<div class="c">
-<div class="why-hero">
-<div class="why-brief">IF WE ARE READING PLATES, WHY NOT DO SOMETHING WITH THEM</div>
-<p>Argus reads license plates from images and video, checks them against a watchlist, and puts the verdict in front of an operator, who makes the call. It runs on one machine with no network: plate strings and file paths go in the log, images stay on disk.</p>
-<div class="why-stats">
-<div class="ws g"><b>0</b><small>network calls shipped</small></div>
-<div class="ws a"><b>1</b><small>human per decision</small></div>
-<div class="ws g"><b>11</b><small>self-checks per launch</small></div>
-</div>
-</div>
-<div class="why-meta">Coding Camp II: Interactivity · Project 3 · <b>Team Hotel</b> · s-01141 · s-01124 · UDS</div>
-<div class="why-sec">WHY BEHIND THE HOW</div>
-<div class="why-cards">
-<div class="wc"><b>Offline-first</b><span>Booths don't always have internet. No network code means footage can't leak.</span></div>
-<div class="wc"><b>OF + docked panels</b><span>It's the course stack. One window beats five tabs when watching a gate.</span></div>
-<div class="wc"><b>Heuristics, not DNN</b><span>No training data, no GPU. Contours we can explain beat a model we can't train.</span></div>
-<div class="wc"><b>EU-first</b><span>The samples are EU plates. US/UK only rename the region; no verdict changes.</span></div>
-<div class="wc"><b>Human decides</b><span>A flag is a suggestion. A person signs Allow, Block or Review.</span></div>
-<div class="wc"><b>JSON store</b><span>Anyone can read it. No server to install next to a booth.</span></div>
-<div class="wc"><b>300 s cooldown</b><span>One banner per incident. Video would strobe without it.</span></div>
-<div class="wc"><b>Self-checks</b><span>Eleven per launch, replayed headless. That is the test suite.</span></div>
-<div class="wc"><b>Determinism</b><span>Fixed thresholds, sorted ties. Same image, same answer on rerun.</span></div>
-</div>
-<div class="why-sec">SCOPE · ETHICS · CONTRIBUTIONS</div>
-<div class="why-cards">
-<div class="wc"><b>Non-goals</b><span>Real-time tracking, trained models, per-state formats, enforcement use. Operator-assistance prototype on demo data.</span></div>
-<div class="wc"><b>Mitigations</b><span>Human decides; Authorized stays silent; unknown types fail closed; every hit is JSONL-auditable; no network code ships.</span></div>
-<div class="wc"><b>Contributions</b><span>One pure pipeline for stills + video; region + fuzzy fixes with zero verdict change; a watchlist an operator can run.</span></div>
-</div>
-</div>
-<div class="nav"><span></span><button id="aboutClose">Back to the deck →</button><span></span></div>
-</div></div>
+  <div id="aboutModal" class="modal hidden">
+    <div class="box">
+      <div class="slide-progress"><i style="width:100%"></i></div>
+      <div class="slide-head">
+        <div class="slide-kicker">ARGUS · SCOPE AND CHOICES</div>
+        <h3><span class="grad">Why</span> this shape</h3>
+        <div class="slide-rule"></div>
+      </div>
+      <div class="c">
+        <div class="why-hero">
+          <p>Argus reads license plates from images or video, checks them against a watchlist, and shows the result to
+            an operator. It runs offline, on one machine, with no network code. Plate text and file paths go to a JSON
+            log; the images stay on disk.</p>
+          <p>The system never acts on its own. It flags; a person decides.</p>
+          <div class="why-stats">
+            <div class="ws g"><b>0</b><small>network calls shipped</small></div>
+            <div class="ws a"><b>1</b><small>human per decision</small></div>
+            <div class="ws g"><b>11</b><small>self-checks per launch</small></div>
+          </div>
+        </div>
+        <div class="why-meta">Coding Camp II: Interactivity · Project 3 · <b>Team Hotel</b> · s-01141 · s-01124 · UDS
+        </div>
 
-<div id="slideModal" class="modal hidden"><div class="box">
-<div class="slide-progress"><i id="slideProg"></i></div>
-<div class="slide-head"><div class="slide-kicker" id="slideKicker">ARGUS · SLIDE 1 OF 11</div><h3 id="slideTitle"></h3><div class="slide-rule"></div></div>
-<div class="c" id="slideBody"></div>
-<div class="nav"><button id="slidePrev">← Prev</button><span class="dots" id="slideDots"></span><span id="slideCount"></span><button id="slideNext">Next →</button></div>
-</div></div>
+        <div class="why-sec">WHY THESE CHOICES</div>
+        <div class="why-cards">
+          <div class="wc"><b>Offline-first</b><span>Booths don't always have internet. No network code means footage
+              can't leak.</span></div>
+          <div class="wc"><b>OF + docked panels</b><span>It's the course stack. One window beats five tabs when watching
+              a gate.</span></div>
+          <div class="wc"><b>Contours, not DNN</b><span>No training data, no GPU, and we can explain every decision the
+              detector makes.</span></div>
+          <div class="wc"><b>EU-first</b><span>The samples are EU plates. US/UK only rename the region; no verdict
+              changes.</span></div>
+          <div class="wc"><b>Operator decides</b><span>A flag is a suggestion. A person signs Allow, Block or
+              Review.</span></div>
+          <div class="wc"><b>JSON store</b><span>Anyone can read it. No server to install next to a booth.</span></div>
+          <div class="wc"><b>300s cooldown</b><span>One banner per incident. Video would strobe without it.</span></div>
+          <div class="wc"><b>Self-checks</b><span>Eleven per launch, replayed headless. That's the test suite.</span>
+          </div>
+          <div class="wc"><b>Determinism</b><span>Fixed thresholds, sorted ties. Same image, same answer on
+              rerun.</span></div>
+        </div>
 
-<script>
-const stages=["ImageSource|load / mat + meta","PlateDetector|bilateral → Canny → bands → NMS","PlateOCR|LSTM + adaptive ROI + PSM retry","PlateValidator|normalize → repair → EU/US/UK","FlagStore|exact → fuzzy → prefix","AlertService|cooldown 5min","Logger|JSONL ring-100"];
-document.getElementById("stages").innerHTML=stages.map(s=>{const[a,b]=s.split("|");return `<div class="stage"><div class="led ok"></div><div>${a}<small>${b}</small></div><span style="color:var(--muted)">✓</span></div>`}).join("");
-const slides=[
-["0 · Unified pipeline",
-`<div class="diag"><svg viewBox="0 0 740 240">
+        <div class="why-sec">SCOPE</div>
+        <div class="why-cards">
+          <div class="wc"><b>What this is</b><span>An operator-assistance prototype on demo data. Stills and video, one
+              pipeline, one watchlist, one operator UI.</span></div>
+          <div class="wc"><b>What it isn't</b><span>Not a real-time tracker. Not trained models. Not per-state formats.
+              Not for enforcement or evidentiary use.</span></div>
+          <div class="wc"><b>Handling</b><span>Every consequential call is made by a person. Authorized plates are
+              silent by policy. Unknown types fail closed. Every hit is JSONL-auditable. Plate data can't leave the
+              machine.</span></div>
+        </div>
+
+        <div class="why-sec">WHAT WE CONTRIBUTED</div>
+        <div class="why-cards">
+          <div class="wc"><b>One pipeline</b><span>Detect, read, repair, validate, match — shared identically by stills
+              and video.</span></div>
+          <div class="wc"><b>Region + fuzzy fixes</b><span>Reporting changed. No verdict changed.</span></div>
+          <div class="wc"><b>An operator's watchlist</b><span>Edit, delete, audit, decide. No hand-editing JSON.</span>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><span></span><button id="aboutClose">Back to the deck →</button><span></span></div>
+    </div>
+  </div>
+
+  <div id="slideModal" class="modal hidden">
+    <div class="box">
+      <div class="slide-progress"><i id="slideProg"></i></div>
+      <div class="slide-head">
+        <div class="slide-kicker" id="slideKicker">ARGUS · SLIDE 1 OF 15</div>
+        <h3 id="slideTitle"></h3>
+        <div class="slide-rule"></div>
+      </div>
+      <div class="c" id="slideBody"></div>
+      <div class="nav"><button id="slidePrev">← Prev</button><span class="dots" id="slideDots"></span><span
+          id="slideCount"></span><button id="slideNext">Next →</button></div>
+    </div>
+  </div>
+
+  <script>
+    const stages = ["ImageSource|load / mat + meta", "PlateDetector|bilateral → Canny → bands → NMS", "PlateOCR|LSTM + adaptive ROI + PSM retry", "PlateValidator|normalize → repair → EU/US/UK", "FlagStore|exact → fuzzy → prefix", "AlertService|cooldown 5min", "Logger|JSONL ring-100"];
+    document.getElementById("stages").innerHTML = stages.map(s => {const [a, b] = s.split("|"); return `<div class="stage"><div class="led ok"></div><div>${a}<small>${b}</small></div><span style="color:var(--muted)">✓</span></div>`}).join("");
+
+    const slides = [
+      ["0 · Unified pipeline",
+        `<div class="diag"><svg viewBox="0 0 740 240">
 <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9" fill="none" stroke="#7db3ff" stroke-width="2"/></marker></defs>
 <g font-size="17" text-anchor="middle">
 <rect x="8" y="16" width="128" height="96" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="72" y="56" fill="#fff" font-weight="bold">Media</text><text x="72" y="82" fill="#9fb0d8" font-size="13">image / frame</text>
@@ -328,10 +1240,10 @@ const slides=[
 <text x="26" y="184" fill="#fff" font-family="Consolas,Menlo,monospace" font-size="16">'SN66XMZ'(66.8,Y,Y) · 'ARAL'(90.8,Y,N) · ''(0.0,N,N)</text>
 <text x="26" y="208" fill="#9fb0d8" font-size="13">applyScanResult() syncs the selected read, logs every stage, then checkAlert()</text>
 </svg></div>
-<p class="take">One function serves Run, Process Frame and live video. <b>Stills and video can't disagree</b>.</p>`],
+<p class="take">processFrame() runs both stills and video.</p>`],
 
-["1 · Detection",
-`<div class="diag"><svg viewBox="0 0 740 302">
+      ["1 · Detection",
+        `<div class="diag"><svg viewBox="0 0 740 302">
 <polygon points="50,16 690,16 600,62 140,62" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
 <text x="370" y="47" fill="#fff" font-size="17" font-weight="bold" text-anchor="middle">CONTOURS · narrow 7×3 + wide 11×5</text>
 <polygon points="140,68 600,68 510,114 230,114" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
@@ -344,10 +1256,10 @@ const slides=[
 <rect x="8" y="242" width="724" height="50" rx="10" fill="url(#gPanel)" stroke="#4a5a94"/>
 <text x="370" y="272" fill="#dbe2f5" font-size="13" text-anchor="middle">area 0.2-15% · aspect 2-6 · extent ≥ 0.1 · density ≥ 0.06 · 0.55·text + 0.45·aspect · NMS 0.35</text>
 </svg></div>
-<p class="take">Boxes are suggestions until the reader confirms them. <b>Blank frames yield zero</b>.</p>`],
+<p class="take">Blank frames return zero candidates.</p>`],
 
-["2 · OCR",
-`<div class="diag"><svg viewBox="0 0 740 268">
+      ["2 · OCR",
+        `<div class="diag"><svg viewBox="0 0 740 268">
 <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9" fill="none" stroke="#7db3ff" stroke-width="2"/></marker></defs>
 <g font-size="17" text-anchor="middle">
 <rect x="8" y="14" width="232" height="100" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="124" y="54" fill="#fff" font-weight="bold">108 × 31</text><text x="124" y="80" fill="#9fb0d8" font-size="13">detector crop · trim</text>
@@ -374,10 +1286,11 @@ const slides=[
 <div class="chipc"><b>M</b><div class="bar"><i style="width:99%"></i></div></div>
 <div class="chipc"><b>Z</b><div class="bar"><i style="width:68%"></i></div></div>
 </div>
-<div class="footnote">Bars show the pattern, not exact values; the 66.8 mean is logged.</div>`],
+<div class="footnote">Bars show the pattern, not exact values; the 66.8 mean is logged.</div>
+<p class="take">Per-symbol mean, not Tesseract word confidence.</p>`],
 
-["3 · Validator + repair",
-`<div class="diag"><svg viewBox="0 0 740 252">
+      ["3 · Validator + repair",
+        `<div class="diag"><svg viewBox="0 0 740 252">
 <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9" fill="none" stroke="#7db3ff" stroke-width="2"/></marker></defs>
 <g font-size="17" text-anchor="middle">
 <rect x="8" y="14" width="168" height="92" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="92" y="52" fill="#fff" font-weight="bold">1-3</text><text x="92" y="78" fill="#9fb0d8" font-size="13">LETTERS</text>
@@ -392,10 +1305,10 @@ const slides=[
 <text x="370" y="152" fill="#fff" font-size="24" font-weight="bold" text-anchor="middle">SN6GXMZ → SN66XMZ</text>
 <text x="370" y="180" fill="#dbe2f5" font-size="13" text-anchor="middle">one directed swap · B→8 G→6 L→1 S→5 Z→2 A→4 E→6 · under-4 strings never repair</text>
 </svg></div>
-<p class="take">Regions without changing a single verdict. The demo plate reports <b>UK</b>.</p>`],
+<p class="take">Repair is one directed swap.</p>`],
 
-["4 · Watchlist + lookup tiers",
-`<div class="diag"><svg viewBox="0 0 740 236">
+      ["4 · Watchlist + lookup tiers",
+        `<div class="diag"><svg viewBox="0 0 740 236">
 <defs><marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9" fill="none" stroke="#7db3ff" stroke-width="2"/></marker></defs>
 <g font-size="17" text-anchor="middle">
 <rect x="8" y="14" width="232" height="96" rx="10" fill="url(#gBox)" stroke="#7eca9c" stroke-width="2"/><text x="124" y="54" fill="#fff" font-weight="bold">1 · EXACT</text><text x="124" y="80" fill="#7eca9c" font-size="13">hash lookup</text>
@@ -409,10 +1322,10 @@ const slides=[
 <text x="370" y="149" fill="#fff" font-size="15" text-anchor="middle">6 seeds · Blocked 2 · Suspicious 2 · Authorized 2 · atomic saves</text>
 <text x="370" y="171" fill="#9fb0d8" font-size="13" text-anchor="middle">Flagged tab edits + deletes · Alert/Silent status · unknown types fail closed to Blocked</text>
 </svg></div>
-<p class="take">The store used to be exact-match only. Now it has <b>three tiers and an editing UI</b>.</p>`],
+<p class="take">Fuzzy tiers only fire below 85% confidence.</p>`],
 
-["5 · Alerts",
-`<div class="diag"><svg viewBox="0 0 740 252">
+      ["5 · Alerts",
+        `<div class="diag"><svg viewBox="0 0 740 252">
 <rect x="8" y="12" width="724" height="66" rx="10" fill="url(#gPanel)" stroke="#e06c5b" stroke-width="2"/>
 <text x="370" y="52" fill="#fff" font-size="21" font-weight="bold" text-anchor="middle">triggerAlert ∧ Blocked/Suspicious ∧ quiet ≥ 300 s</text>
 <g font-size="16" text-anchor="middle">
@@ -424,10 +1337,10 @@ const slides=[
 <text x="370" y="198" fill="#fff" font-size="20" font-weight="bold" text-anchor="middle">FLAGGED PLATE DETECTED · Blocked · SN66XMZ</text>
 <text x="370" y="222" fill="#e8a49b" font-size="13" text-anchor="middle">Authorized never alerts. It still logs.</text>
 </svg></div>
-<p class="take"><b>One banner per incident</b>; video would strobe without it. Every hit still reaches the log.</p>`],
+<p class="take">Authorized plates log but never alert.</p>`],
 
-["6 · Logger + decisions",
-`<pre class="json">{<span class="k">"timestamp"</span>: <span class="s">"2026-09-14 04:36:01"</span>, <span class="k">"imagePath"</span>: <span class="s">"car_01.jpg"</span>,
+      ["6 · Logger + decisions",
+        `<pre class="json">{<span class="k">"timestamp"</span>: <span class="s">"2026-09-14 04:36:01"</span>, <span class="k">"imagePath"</span>: <span class="s">"car_01.jpg"</span>,
  <span class="k">"plateRaw"</span>: <span class="s">"SN66XMZ"</span>, <span class="k">"plateNorm"</span>: <span class="s">"SN66XMZ"</span>, <span class="k">"ocrConf"</span>: 66.8,
  <span class="k">"flagMatch"</span>: true, <span class="k">"flagType"</span>: <span class="s">"BLOCKED"</span>, <span class="k">"region"</span>: <span class="s">"UK"</span>,
  <span class="k">"decision"</span>: <span class="s">"Review"</span>, <span class="k">"operatorNotes"</span>: <span class="s">""</span>}</pre>
@@ -436,10 +1349,10 @@ const slides=[
 <div class="kpi g"><b>safe</b><small>failures logged, never thrown</small></div>
 <div class="kpi a"><b>100</b><small>event ring · Logs tab</small></div>
 </div>
-<p class="take">Allow / Block / Review plus notes. <b>Enter saves</b>; every launch replays a probe event first.</p>`],
+<p class="take">One JSON object per inspected read.</p>`],
 
-["7 · Multi-plate reads",
-`<div class="diag"><svg viewBox="0 0 740 218">
+      ["7 · Multi-plate reads",
+        `<div class="diag"><svg viewBox="0 0 740 218">
 <g text-anchor="middle">
 <rect x="8" y="14" width="172" height="122" rx="10" fill="url(#gBad)" stroke="#e06c5b" stroke-width="2"/><text x="94" y="48" fill="#e06c5b" font-size="30" font-weight="bold">1</text><text x="94" y="74" fill="#fff" font-size="16" font-weight="bold">SN66XMZ</text><text x="94" y="96" fill="#e06c5b" font-size="13">66.8 · BLOCKED</text><text x="94" y="116" fill="#e8a49b" font-size="12">shown · red box</text>
 <rect x="192" y="14" width="172" height="122" rx="10" fill="url(#gBox)" stroke="#4a5a94" stroke-width="2"/><text x="278" y="48" fill="#9fb0d8" font-size="30" font-weight="bold">2</text><text x="278" y="74" fill="#fff" font-size="16" font-weight="bold">ARAL</text><text x="278" y="96" fill="#7eca9c" font-size="13">90.8 · clear</text><text x="278" y="116" fill="#9fb0d8" font-size="12">steppable</text>
@@ -450,10 +1363,10 @@ const slides=[
 <text x="370" y="171" fill="#dbe2f5" font-size="13" text-anchor="middle">Prev / Next stepping · every box labeled · Blocked boxes go red alone</text>
 <text x="370" y="193" fill="#dbe2f5" font-size="13" text-anchor="middle">alerts follow the strongest hit even when uninspected</text>
 </svg></div>
-<p class="take"><b>Validity beats raw confidence</b>. 66.8 flagged outranks 90.8 clear.</p>`],
+<p class="take">Valid reads rank above invalid ones.</p>`],
 
-["8 · Video + temporal vote",
-`<div class="diag"><svg viewBox="0 0 740 252">
+      ["8 · Video + temporal vote",
+        `<div class="diag"><svg viewBox="0 0 740 252">
 <rect x="8" y="12" width="724" height="58" rx="10" fill="url(#gPanel)" stroke="#4a5a94"/>
 <rect x="22" y="24" width="88" height="34" rx="6" fill="#2c4470"/><rect x="120" y="24" width="88" height="34" rx="6" fill="#2c4470"/><rect x="218" y="24" width="88" height="34" rx="6" fill="#2c4470"/><rect x="316" y="24" width="88" height="34" rx="6" fill="#e5b567"/><rect x="414" y="24" width="88" height="34" rx="6" fill="#232c4e" stroke="#4a5a94"/><rect x="512" y="24" width="88" height="34" rx="6" fill="#232c4e" stroke="#4a5a94"/><rect x="610" y="24" width="88" height="34" rx="6" fill="#232c4e" stroke="#4a5a94"/>
 <text x="370" y="62" fill="#9fb0d8" font-size="12" text-anchor="middle">every 45th decoded frame runs the identical still pipeline · amber = latest</text>
@@ -466,10 +1379,10 @@ const slides=[
 <text x="370" y="198" fill="#fff" font-size="16" font-weight="bold" text-anchor="middle">Lamborghini @0:30 · RR296 · 67.8 · valid + flagged</text>
 <text x="370" y="221" fill="#7eca9c" font-size="13" text-anchor="middle">temporal votes accumulating · ~0.5 fps effective · video stays local-only</text>
 </svg></div>
-<p class="take">Votes across frames fix 1-glyph flips. <b>Still tuning doesn't</b>.</p>`],
+<p class="take">Same pipeline as stills, sampled every 45th frame.</p>`],
 
-["9 · Measured results",
-`<div class="kpis">
+      ["9 · Measured results",
+        `<div class="kpis">
 <div class="kpi g"><b>11/11</b><small>self-checks OK</small></div>
 <div class="kpi g"><b>8/8</b><small>smoke checks pass</small></div>
 <div class="kpi a"><b>SN66XMZ</b><small>66.8 · UK · flagged</small></div>
@@ -483,20 +1396,20 @@ const slides=[
 </g>
 <text x="370" y="114" fill="#9fb0d8" font-size="12" text-anchor="middle">exact text, modest confidence · car_02 plate #1 at 0.97 · boards: all plates · blank: zero reads</text>
 </svg></div>
-<p class="take">Regions, true fuzzy, prefix search and full watchlist editing. <b>Every check still passes</b>.</p>`],
+<p class="take">Lower confidence, exact read.</p>`],
 
-["10 · Limits + next",
-`<div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+      ["10 · Limits + next",
+        `<div class="kpis" style="grid-template-columns:repeat(3,1fr)">
 <div class="kpi w"><b>tilt</b><small>steep angles need deskew. No quad output yet</small></div>
 <div class="kpi w"><b>cream</b><small>white-on-cream &amp; distant blur can miss entirely</small></div>
 <div class="kpi w"><b>live cost</b><small>1-3s sync ticks ≈ 0.5fps effective</small></div>
 </div>
 <div class="stateline">Single-glyph confusion at ~20px is a voting problem, not a tuning problem</div>
 <div class="stateline">Next: a trained detector replaces the contour heuristic at the top end; per-state US shapes refine regions further</div>
-<div class="footnote">Deterministic throughout: fixed thresholds, no RNG, sorted ties. Same image, same verdicts, every run.</div>`],
+<p class="take">Fixed thresholds, sorted ties, no randomness.</p>`],
 
-["11 · Architecture",
-`<div class="diag"><svg viewBox="0 0 740 330">
+      ["11 · Architecture",
+        `<div class="diag"><svg viewBox="0 0 740 330">
 <rect x="170" y="12" width="400" height="58" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
 <text x="370" y="36" fill="#fff" font-size="19" font-weight="bold" text-anchor="middle">ofApp</text>
 <text x="370" y="58" fill="#9fb0d8" font-size="13" text-anchor="middle">orchestrates UI + pipeline · syncs members from returned values</text>
@@ -512,10 +1425,10 @@ const slides=[
 <text x="370" y="284" fill="#dbe2f5" font-size="13" text-anchor="middle">formats: Region enum + strict matchers. The OO shape is PlateFormat strategies, one per region</text>
 <text x="370" y="306" fill="#9fb0d8" font-size="13" text-anchor="middle">validator tries strategies in order · same verdicts · open for extension, closed for modification</text>
 </svg></div>
-<p class="take"><b>Six small classes, one orchestrator</b>: openFrameworks · ofxImGui · OpenCV · Tesseract.</p>`],
+<p class="take">Six classes, one orchestrator.</p>`],
 
-["12 · Memory",
-`<div class="diag"><svg viewBox="0 0 740 252">
+      ["12 · Memory",
+        `<div class="diag"><svg viewBox="0 0 740 252">
 <g text-anchor="middle">
 <rect x="8" y="12" width="356" height="150" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/><text x="186" y="42" fill="#fff" font-size="17" font-weight="bold">STACK</text><text x="186" y="70" fill="#dbe2f5" font-size="13">Mat headers · vectors · ScanResult</text><text x="186" y="94" fill="#dbe2f5" font-size="13">loop temporaries · boxes · votes</text><text x="186" y="118" fill="#7eca9c" font-size="13">freed automatically</text><text x="186" y="142" fill="#9fb0d8" font-size="13">nothing to forget</text>
 <rect x="376" y="12" width="356" height="150" rx="10" fill="url(#gBox)" stroke="#e5b567" stroke-width="2"/><text x="554" y="42" fill="#fff" font-size="17" font-weight="bold">HEAP</text><text x="554" y="70" fill="#dbe2f5" font-size="13">pixel buffers → owned by Mat RAII</text><text x="554" y="94" fill="#dbe2f5" font-size="13">Tesseract engine → unique_ptr owner</text><text x="554" y="118" fill="#dbe2f5" font-size="13">JSON docs → scoped, never stored</text><text x="554" y="142" fill="#e5b567" font-size="13">every byte has an owner</text>
@@ -524,36 +1437,182 @@ const slides=[
 <text x="370" y="201" fill="#fff" font-size="15" font-weight="bold" text-anchor="middle">no-loss evidence: ring-100 cap · purge path · RSS readout · stable across runs</text>
 <text x="370" y="224" fill="#7eca9c" font-size="13" text-anchor="middle">bounded containers only. Nothing grows with frames processed</text>
 </svg></div>
-<p class="take">Stack by default, heap only with an owner. <b>That is the no-leak argument</b>.</p>`]];
-let cur=0;
-// Story order: appendix entries sit in-flow, so Prev/Next/dots follow flow, not array order.
-const flow=[0,11,1,2,3,4,5,6,12,7,8,9,10];
-let pos=0;
-function render(i){cur=i;
-const raw=slides[cur][0],cut=raw.indexOf("·");
-const name=cut<0?raw:raw.slice(cut+1).trim(),first=name.split(" ")[0],rest=name.slice(first.length);
-document.getElementById("slideKicker").textContent="ARGUS · SLIDE "+(pos+1)+" OF "+flow.length;
-document.getElementById("slideTitle").innerHTML='<span class="grad">'+first+'</span>'+rest.replace(/</g,"&lt;");
-document.getElementById("slideBody").innerHTML=slides[cur][1];
-document.getElementById("slideCount").textContent=(pos+1)+" / "+flow.length;
-document.getElementById("slideProg").style.width=((pos+1)/flow.length*100)+"%";
-const dots=document.getElementById("slideDots");dots.innerHTML="";
-flow.forEach((s,k)=>{const d=document.createElement("i");if(k===pos)d.className="on";d.onclick=e=>{e.stopPropagation();pos=k;render(s);};dots.appendChild(d);});
-document.getElementById("slideModal").classList.remove("hidden");}
-function openSlide(i){const p=flow.indexOf(i);pos=p<0?0:p;render(flow[pos]);}
-function step(d){pos=(pos+d+flow.length)%flow.length;render(flow[pos]);}
-function closeSlide(){document.getElementById("slideModal").classList.add("hidden");}
-document.getElementById("btnWhy").onclick=e=>{e.stopPropagation();document.getElementById("aboutModal").classList.remove("hidden");};
-document.getElementById("btnArch").onclick=e=>{e.stopPropagation();openSlide(11);};
-document.getElementById("btnMem").onclick=e=>{e.stopPropagation();openSlide(12);};
-document.getElementById("aboutClose").onclick=e=>{e.stopPropagation();document.getElementById("aboutModal").classList.add("hidden");};
-document.getElementById("aboutModal").addEventListener("click",e=>{if(e.target.id==="aboutModal")e.target.classList.add("hidden");});
-document.querySelectorAll(".zone").forEach(z=>z.addEventListener("click",e=>{e.stopPropagation();openSlide(parseInt(z.dataset.slide,10));}));
-document.getElementById("slidePrev").onclick=e=>{e.stopPropagation();step(-1);};
-document.getElementById("slideNext").onclick=e=>{e.stopPropagation();step(1);};
-document.getElementById("slideModal").addEventListener("click",e=>{if(e.target.id==="slideModal")closeSlide();});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeSlide();document.getElementById("aboutModal").classList.add("hidden");return;}if(!document.getElementById("slideModal").classList.contains("hidden")){if(e.key==="ArrowRight")step(1);if(e.key==="ArrowLeft")step(-1);}});
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));b.classList.add("active");["console","flagged","logs","mem"].forEach(t=>document.getElementById("tab-"+t).classList.toggle("hidden",t!==b.dataset.tab));});
-</script>
+<p class="take">Bounded containers only. Nothing grows with frames.</p>`],
+
+      ["13 · Process timeline",
+        `<div class="diag"><svg viewBox="0 0 740 500">
+  <defs>
+    <linearGradient id="timelineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7db3ff"/><stop offset="50%" stop-color="#7eca9c"/><stop offset="100%" stop-color="#e5b567"/>
+    </linearGradient>
+    <linearGradient id="phaseGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e2a4a"/><stop offset="100%" stop-color="#0d1426"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="col"/><feMerge><feMergeNode in="col"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="timelineArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12" fill="url(#timelineGrad)"/>
+    </marker>
+  </defs>
+  
+  <text x="370" y="28" fill="#fff" font-size="20" font-weight="700" text-anchor="middle">Phase Branches 02 → 16 · Development Timeline</text>
+  <text x="370" y="48" fill="#9fb0d8" font-size="12" text-anchor="middle">15 buildable phases · tagged commits · Yellowdig documented</text>
+  
+  <line x1="80" y1="60" x2="80" y2="380" stroke="url(#timelineGrad)" stroke-width="3" marker-end="url(#timelineArrow)"/>
+  
+  <g font-family="Consolas,Menlo,monospace" font-size="12">
+    <g transform="translate(40, 70)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7db3ff" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">02</text>
+      <text x="58" y="4" fill="#7db3ff" font-size="12" font-weight="600" text-anchor="start">Image Load · Viewport · Panels</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">6105dfc</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 114)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7db3ff" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">03</text>
+      <text x="58" y="4" fill="#7db3ff" font-size="12" font-weight="600" text-anchor="start">Plate Detector Stub · Viewport Overlays</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">5e43b97</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 158)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7eca9c" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">04</text>
+      <text x="58" y="4" fill="#7eca9c" font-size="12" font-weight="600" text-anchor="start">OCR Integration · Best-Candidate Reading</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">5aeb01a</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 202)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7eca9c" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">05</text>
+      <text x="58" y="4" fill="#7eca9c" font-size="12" font-weight="600" text-anchor="start">Plate Validator · Normalizer</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">d7443fe</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 246)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#e5b567" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">06</text>
+      <text x="58" y="4" fill="#e5b567" font-size="12" font-weight="600" text-anchor="start">Flag Store · JSON Watchlist</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">8632269</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 290)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#e06c5b" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">07</text>
+      <text x="58" y="4" fill="#e06c5b" font-size="12" font-weight="600" text-anchor="start">Alert Service · Cooldown · JSONL Logger</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">a064846</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 334)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7db3ff" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">08</text>
+      <text x="58" y="4" fill="#7db3ff" font-size="12" font-weight="600" text-anchor="start">Improved Detector · Text-Ranked Blobs</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">c8ed531</text>
+      <line x1="80" y1="0" x2="640" y2="0" stroke="#3d4a7a" stroke-width="1" stroke-dasharray="4,4"/>
+    </g>
+    <g transform="translate(40, 378)">
+      <circle cx="40" cy="0" r="10" fill="url(#phaseGrad)" stroke="#7eca9c" stroke-width="2" filter="url(#glow)"/>
+      <text x="40" y="4" fill="#fff" font-size="11" font-weight="bold" text-anchor="middle">09</text>
+      <text x="58" y="4" fill="#7eca9c" font-size="12" font-weight="600" text-anchor="start">Hardened OCR · Preprocessing · Tuning</text>
+      <text x="680" y="4" fill="#9fb0d8" font-size="10" text-anchor="end">3462bda</text>
+    </g>
+  </g>
+  
+  <g font-size="11" fill="#8fa3d8" text-anchor="middle">
+    <rect x="80" y="405" width="580" height="28" rx="6" fill="rgba(30,42,74,0.6)" stroke="#3d4a7a" stroke-width="1"/>
+    <text x="370" y="418" fill="#8fa3d8" font-size="10">10 · End-to-End Tuning · 11 · Accuracy · 12 · Video Input · 13 · Multi-Plate Live · 14 · Stub Cleanup</text>
+    <rect x="80" y="435" width="580" height="28" rx="6" fill="rgba(30,42,74,0.6)" stroke="#3d4a7a" stroke-width="1"/>
+    <text x="370" y="448" fill="#8fa3d8" font-size="10">15 · Multi-Band Detector · 16 · Multi-Region + Full Watchlist UI</text>
+    <text x="370" y="472" font-size="10" fill="#7db3ff">Each phase builds, tests, and tags clean · Yellowdig posts document obstacles, decisions, hand-offs</text>
+  </g>
+</svg></div>
+<p class="take">Each phase builds and tests on its own.</p>`],
+
+      ["14 · Matrix Manipulation Deep Dive",
+        `<div class="diag"><svg viewBox="0 0 740 420">
+  <text x="370" y="24" fill="#fff" font-size="19" font-weight="bold" text-anchor="middle">Matrix Manipulation · The Pipeline as Linear Algebra</text>
+  <g font-size="15" text-anchor="middle">
+    <rect x="8" y="50" width="356" height="170" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
+    <text x="186" y="72" fill="#fff" font-size="16" font-weight="bold">Detector · PlateDetector.cpp</text>
+    <text x="186" y="94" fill="#dbe2f5" font-size="13">gray = cv::cvtColor(color, CV_RGB2GRAY)</text>
+    <text x="186" y="108" fill="#9fb0d8" font-size="12">Mat header borrows pixel data, no copy</text>
+    <text x="186" y="128" fill="#dbe2f5" font-size="13">bilateralFilter(gray, smooth, 7, 75, 75)</text>
+    <text x="186" y="142" fill="#9fb0d8" font-size="12">5×5 separable kernel ≈ matrix convolution</text>
+    <text x="186" y="162" fill="#dbe2f5" font-size="13">Canny(smooth, edges, 40, 120)</text>
+    <text x="186" y="176" fill="#9fb0d8" font-size="12">gradient magnitude + non-max suppression</text>
+    <text x="186" y="192" fill="#9fb0d8" font-size="12">morphologyEx(edges, close, kernel)</text>
+    <text x="186" y="206" fill="#9fb0d8" font-size="12">kernel = getStructuringElement(7×3 / 11×5)</text>
+  </g>
+  <g font-size="15" text-anchor="middle">
+    <rect x="376" y="50" width="356" height="170" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
+    <text x="554" y="74" fill="#fff" font-size="16" font-weight="bold">OCR · PlateOCR.cpp</text>
+    <text x="554" y="100" fill="#dbe2f5" font-size="13">prepareRoi: crop → 2× upscale → adapt → pad</text>
+    <text x="554" y="116" fill="#9fb0d8" font-size="12">resize(cropped, scaled, 2.0, INTER_LINEAR)</text>
+    <text x="554" y="132" fill="#dbe2f5" font-size="13">resize(scaled, scaled, 4×, INTER_CUBIC)</text>
+    <text x="554" y="148" fill="#9fb0d8" font-size="12">copyMakeBorder(pad, pad, pad, pad, BLACK)</text>
+    <text x="554" y="172" fill="#dbe2f5" font-size="13">tesseract::TessBaseAPI → Mat header via SetImage</text>
+    <text x="554" y="188" fill="#9fb0d8" font-size="12">data, cols, rows, channels, step → LSTM input</text>
+    <text x="554" y="204" fill="#9fb0d8" font-size="12">Per-symbol confidences → mean = Σ/N</text>
+  </g>
+  <g font-size="15" text-anchor="middle">
+    <rect x="8" y="236" width="356" height="170" rx="10" fill="url(#gBox)" stroke="#7eca9c" stroke-width="2"/>
+    <text x="186" y="260" fill="#fff" font-size="16" font-weight="bold">Validator · PlateValidator.cpp</text>
+    <text x="186" y="284" fill="#dbe2f5" font-size="13">normalize(): O→0 I→1 → upper → alnum filter</text>
+    <text x="186" y="300" fill="#9fb0d8" font-size="12">per-character map, no branches on hot path</text>
+    <text x="186" y="324" fill="#dbe2f5" font-size="13">isValid(): Region enum + strict matchers</text>
+    <text x="186" y="340" fill="#9fb0d8" font-size="12">strictGroups(text, L, D, T) → exact slot check</text>
+    <text x="186" y="356" fill="#9fb0d8" font-size="12">repair(): one directed swap, first valid wins</text>
+    <text x="186" y="372" fill="#9fb0d8" font-size="12">strictGroups uses char class as matrix predicate</text>
+  </g>
+  <g font-size="15" text-anchor="middle">
+    <rect x="376" y="236" width="356" height="170" rx="10" fill="url(#gBox)" stroke="#7db3ff" stroke-width="2"/>
+    <text x="554" y="260" fill="#fff" font-size="16" font-weight="bold">Pipeline · ofApp.cpp</text>
+    <text x="554" y="284" fill="#dbe2f5" font-size="13">processFrame() = pure vector&lt;ScanResult&gt;</text>
+    <text x="554" y="300" fill="#9fb0d8" font-size="12">detect → read top-4 → repair → validate → lookup</text>
+    <text x="554" y="316" fill="#dbe2f5" font-size="13">applyScanResult() syncs members from result</text>
+    <text x="554" y="332" fill="#9fb0d8" font-size="12">video: every 45th frame → same pure function</text>
+    <text x="554" y="348" fill="#9fb0d8" font-size="12">temporal vote = majority(9-frame window)</text>
+    <text x="554" y="364" fill="#9fb0d8" font-size="12">tracks = IoU(box, track) &gt; 0.35 · 3-miss evict</text>
+  </g>
+  <text x="370" y="412" fill="#7db3ff" font-size="13" text-anchor="middle">
+    Every stage is a matrix transform · pipeline composes them · same code runs stills and video
+  </text>
+</svg></div>
+<p class="take">Each stage is a matrix transform.</p>`]];
+    let cur = 0;
+    // Story order: appendix entries sit in-flow, so Prev/Next/dots follow flow, not array order.
+    const flow = [0, 11, 13, 14, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9, 10];
+    let pos = 0;
+    function render(i) {
+      cur = i;
+      const raw = slides[cur][0], cut = raw.indexOf("·");
+      const name = cut < 0 ? raw : raw.slice(cut + 1).trim(), first = name.split(" ")[0], rest = name.slice(first.length);
+      document.getElementById("slideKicker").textContent = "ARGUS · SLIDE " + (pos + 1) + " OF " + flow.length;
+      document.getElementById("slideTitle").innerHTML = '<span class="grad">' + first + '</span>' + rest.replace(/</g, "&lt;");
+      document.getElementById("slideBody").innerHTML = slides[cur][1];
+      document.getElementById("slideCount").textContent = (pos + 1) + " / " + flow.length;
+      document.getElementById("slideProg").style.width = ((pos + 1) / flow.length * 100) + "%";
+      const dots = document.getElementById("slideDots"); dots.innerHTML = "";
+      flow.forEach((s, k) => {const d = document.createElement("i"); if (k === pos) d.className = "on"; d.onclick = e => {e.stopPropagation(); pos = k; render(s);}; dots.appendChild(d);});
+      document.getElementById("slideModal").classList.remove("hidden");
+    }
+    function openSlide(i) {const p = flow.indexOf(i); pos = p < 0 ? 0 : p; render(flow[pos]);}
+    function step(d) {pos = (pos + d + flow.length) % flow.length; render(flow[pos]);}
+    function closeSlide() {document.getElementById("slideModal").classList.add("hidden");}
+    document.getElementById("btnWhy").onclick = e => {e.stopPropagation(); document.getElementById("aboutModal").classList.remove("hidden");};
+    document.getElementById("btnArch").onclick = e => {e.stopPropagation(); openSlide(11);};
+    document.getElementById("btnMem").onclick = e => {e.stopPropagation(); openSlide(12);};
+    document.getElementById("btnTimeline").onclick = e => {e.stopPropagation(); openSlide(13);};
+    document.getElementById("aboutClose").onclick = e => {e.stopPropagation(); document.getElementById("aboutModal").classList.add("hidden");};
+    document.getElementById("aboutModal").addEventListener("click", e => {if (e.target.id === "aboutModal") e.target.classList.add("hidden");});
+    document.querySelectorAll(".zone").forEach(z => z.addEventListener("click", e => {e.stopPropagation(); openSlide(parseInt(z.dataset.slide, 10));}));
+    document.getElementById("slidePrev").onclick = e => {e.stopPropagation(); step(-1);};
+    document.getElementById("slideNext").onclick = e => {e.stopPropagation(); step(1);};
+    document.getElementById("slideModal").addEventListener("click", e => {if (e.target.id === "slideModal") closeSlide();});
+    document.addEventListener("keydown", e => {if (e.key === "Escape") {closeSlide(); document.getElementById("aboutModal").classList.add("hidden"); return;} if (!document.getElementById("slideModal").classList.contains("hidden")) {if (e.key === "ArrowRight") step(1); if (e.key === "ArrowLeft") step(-1);} });
+    document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active")); b.classList.add("active");["console", "flagged", "logs", "mem"].forEach(t => document.getElementById("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));});
+  </script>
 </body>
+
 </html>
