@@ -34,6 +34,9 @@ public:
     float smallAreaScale = 0.5f;
     float largeAreaScale = 2.0f;
 
+    /// Extra contrast pass recovering white-on-cream and dim plates.
+    bool claheEnable = true;
+
     /// Extra contour statistics on the console when enabled.
     bool debugMode = false;
 

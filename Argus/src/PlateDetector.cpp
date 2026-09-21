@@ -191,6 +191,20 @@ void collectScaleBlobs(const cv::Mat& rawEdges, double imageArea, float minAreaF
                  maxAspect, out);
 }
 
+// Contrast pass recovering low-contrast plates via local equalization.
+void collectContrastBlobs(const cv::Mat& gray, int low, int high, double imageArea,
+                          float minAreaFraction, float maxAreaFraction, float minAspect,
+                          float maxAspect, std::vector<argus::PlateCandidate>& out)
+{
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+    cv::Mat enhanced;
+    clahe->apply(gray, enhanced);
+    cv::Mat edges;
+    detectEdges(enhanced, low, high, edges);
+    collectScaleBlobs(edges, imageArea, minAreaFraction, maxAreaFraction, minAspect, maxAspect,
+                      out);
+}
+
 // Drops weaker boxes overlapping a stronger one.
 void suppressOverlaps(std::vector<argus::PlateCandidate>& candidates)
 {
@@ -251,6 +265,11 @@ std::vector<PlateCandidate> PlateDetector::detect(const ofImage& input)
     float largeMax = std::min(maxAreaFraction * largeAreaScale, MAX_AREA_CEILING);
     collectScaleBlobs(rawEdges, imageArea, maxAreaFraction, largeMax, minAspectRatio,
                       maxAspectRatio, candidates);
+    if (claheEnable)
+    {
+        collectContrastBlobs(gray, cannyLow, cannyHigh, imageArea, minAreaFraction, maxAreaFraction,
+                             minAspectRatio, maxAspectRatio, candidates);
+    }
     std::size_t blobCount = candidates.size();
 
     std::sort(candidates.begin(), candidates.end(),

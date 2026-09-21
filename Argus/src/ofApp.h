@@ -11,10 +11,14 @@
 #include "ofMain.h"
 #include "ofxImGui.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <mutex>
 #include <optional>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 /// One pass through detect, read, validate and watchlist lookup.
@@ -377,6 +381,9 @@ public:
     /// Releases derived caches and reports what was freed.
     void purgeCaches();
 
+    /// Unconditional cache clear used by automatic memory caps.
+    void purgeCachesInternal();
+
     /// Toggles video playback, logging when no video is loaded.
     void toggleVideoPlay();
 
@@ -423,6 +430,95 @@ public:
 
     /// Operator notes edited in the inspector panel.
     char notesBuffer[NOTES_BUFFER_SIZE];
+
+    /// Operator role gating edits and destructive actions.
+    enum class Role
+    {
+        Admin,
+        Operator,
+        Viewer
+    };
+
+    /// Active role, Viewer is read-only for flags and purge.
+    Role currentRole = Role::Operator;
+
+    /// Privacy blur applied to ROI pixels before display.
+    bool blurEnabled = false;
+
+    /// Alert sound toggle, generated tone played on flagged hits.
+    bool alertSoundEnabled = true;
+
+    /// Recent alert banners for the Alerts history view.
+    std::vector<std::string> alertHistory;
+
+    /// Total alerts raised this session.
+    int alertCount = 0;
+
+    /// Alert tone player backing the audible cue.
+    ofSoundPlayer alertSound;
+
+    /// Memory budget caps enforced with automatic cache clears.
+    float maxTotalMB = 3200.0f;
+    float maxImageCacheMB = 512.0f;
+    int maxVideoQueue = 2;
+    bool autoClearEnable = true;
+
+    /// Spilled video frames dropped when the queue overflows.
+    int spillCount = 0;
+
+    /// Sharpness floor skipping blurred frames in live sampling.
+    float minSharpness = 20.0f;
+
+    /// Background batch run state shared with the worker thread.
+    std::thread batchThread;
+    std::mutex batchMutex;
+    std::atomic<bool> batchRunning{false};
+    std::string batchProgress = "(idle)";
+    int batchDone = 0;
+    int batchTotal = 0;
+
+    /// Bounded video pixel queue decoupling decode from pipeline.
+    std::queue<ofPixels> videoQueue;
+    std::mutex videoMutex;
+
+    /// Guards console lines shared with the batch worker thread.
+    std::mutex consoleMutex;
+
+    /// Serializes Tesseract access between UI and worker threads.
+    std::mutex ocrMutex;
+
+    /// Rejects media failing size, traversal or magic checks.
+    bool guardMediaPath(const std::string& path);
+
+    /// Starts the background full-pipeline batch over bundled images.
+    void startBatchThread();
+
+    /// Joins a finished batch worker, reporting totals once.
+    void pollBatchThread();
+
+    /// Plays the generated alert tone without blocking the UI.
+    void playAlertSound();
+
+    /// Writes a short sine alert tone, skipping when one exists.
+    void writeAlertTone(const std::string& path);
+
+    /// Records one alert banner into history and the console.
+    void recordAlert(const std::string& banner);
+
+    /// Enforces memory caps, auto-clearing caches past the threshold.
+    void enforceMemoryCaps();
+
+    /// True when the active role may edit the watchlist.
+    bool canEditFlags() const;
+
+    /// True when the active role may purge caches and logs.
+    bool canPurge() const;
+
+    /// Exports recent logs to CSV and JSON with a console receipt.
+    void exportLogs();
+
+    /// Retains recent log days and rotates oversized log files.
+    void retainLogs();
 
 private:
     /// Tiles the docked panels once so first run matches the mockup.
@@ -522,4 +618,25 @@ private:
 
     /// Verifies overlap matching on fixed synthetic tracks.
     bool checkTrackMatching();
+
+    /// Sharpness variance of one frame, low values mean blur.
+    float frameSharpness(const ofImage& frame);
+
+    /// Deskewed ROI crop straightening tilted plates before OCR.
+    void cropDeskewedRoi(const ofImage& frame, const argus::PlateCandidate& box, ofImage& roi);
+
+    /// Straightens one ROI in place when a tilt is detected.
+    void straightenRoi(ofImage& roi);
+
+    /// Worker body running the full pipeline over bundled images.
+    void batchWorkerBody();
+
+    /// Draws per-character confidence bars for the selected read.
+    void drawOcrSparkline();
+
+    /// Draws filled privacy boxes over plates when blur is enabled.
+    void drawBlurOverlays();
+
+    /// Draws role, memory and alert policy controls.
+    void drawPolicySection();
 };

@@ -41,6 +41,12 @@ public:
     /// Master switch for the crop and upscale preparation.
     bool preprocessEnable = true;
 
+    /// Retry with Otsu-thresholded ROI when the grayscale read is weak.
+    bool otsuRetryEnable = true;
+
+    /// Retry with deskewed rotations when the upright read is weak.
+    bool rotationRetryEnable = true;
+
     /// Primary segmentation mode, with block and sparse fallbacks on weak reads.
     int tesseractPsm = 7;
 

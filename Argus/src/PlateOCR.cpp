@@ -6,6 +6,10 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+// OpenCV 5 moved contour helpers out of imgproc into geometry.
+#if CV_VERSION_MAJOR >= 5
+#include <opencv2/geometry.hpp>
+#endif
 
 #include <cctype>
 
@@ -195,6 +199,37 @@ bool readAtSegmentation(tesseract::TessBaseAPI& api, const cv::Mat& ready, int p
     return true;
 }
 
+// Otsu-binarized copy helping low-contrast and cream backgrounds.
+cv::Mat thresholdVariant(const cv::Mat& ready)
+{
+    cv::Mat blurred;
+    cv::GaussianBlur(ready, blurred, cv::Size(3, 3), 0.0);
+    cv::Mat binary;
+    cv::threshold(blurred, binary, 0.0, 255.0, cv::THRESH_BINARY | cv::THRESH_OTSU);
+    return binary;
+}
+
+// Rotated copy deskewing tilted plates around the ROI center.
+cv::Mat rotatedVariant(const cv::Mat& ready, double angleDeg)
+{
+    cv::Point2f center(ready.cols * 0.5f, ready.rows * 0.5f);
+    cv::Mat warp = cv::getRotationMatrix2D(center, angleDeg, 1.0);
+    cv::Mat rotated;
+    cv::warpAffine(ready, rotated, warp, ready.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT,
+                   cv::Scalar(0));
+    return rotated;
+}
+
+// Keeps the higher-confidence reading between current best and retry.
+void keepStronger(tesseract::TessBaseAPI& api, const cv::Mat& mat, int psm, argus::OcrResult& best)
+{
+    argus::OcrResult retry;
+    if (readAtSegmentation(api, mat, psm, retry) && retry.meanConf > best.meanConf)
+    {
+        best = retry;
+    }
+}
+
 } // namespace
 
 namespace argus
@@ -279,11 +314,16 @@ OcrResult PlateOCR::recognize(const ofImage& plateRoi)
     // Weak single-line reads get one retry per fallback mode, best kept.
     for (int psm : FALLBACK_PSMS)
     {
-        OcrResult retry;
-        if (readAtSegmentation(*api, ready, psm, retry) && retry.meanConf > result.meanConf)
-        {
-            result = retry;
-        }
+        keepStronger(*api, ready, psm, result);
+    }
+    if (otsuRetryEnable && !ready.empty())
+    {
+        keepStronger(*api, thresholdVariant(ready), tesseractPsm, result);
+    }
+    if (rotationRetryEnable && !ready.empty())
+    {
+        keepStronger(*api, rotatedVariant(ready, 12.0), tesseractPsm, result);
+        keepStronger(*api, rotatedVariant(ready, -12.0), tesseractPsm, result);
     }
     api->SetPageSegMode(static_cast<tesseract::PageSegMode>(tesseractPsm));
     return result;

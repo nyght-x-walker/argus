@@ -64,6 +64,20 @@ std::size_t skipGroup(const std::string& text, std::size_t pos, int maxCount, bo
     return pos;
 }
 
+// True for common US vendor shapes: 1-3 letters then 3-4 digits, no tail.
+// Region-only refinement, EU generic gate still decides validity above.
+bool isUsVendorShape(const std::string& text)
+{
+    if (text.size() < 4 || text.size() > 7)
+    {
+        return false;
+    }
+    std::size_t pos = skipGroup(text, 0, 3, true);
+    std::size_t lead = pos;
+    pos = skipGroup(text, pos, 4, false);
+    return lead >= 1 && lead <= 3 && pos == text.size() && (text.size() - lead) >= 3;
+}
+
 // One directed glyph confusion, letters to digits or back.
 struct GlyphSwap
 {
@@ -149,13 +163,13 @@ bool PlateValidator::isValid(const std::string& normalized, Region& region) cons
         return false;
     }
     // Strict shapes name the region of EU-valid reads.
-    if (strictGroups(normalized, US_LETTERS, US_DIGITS, 0))
-    {
-        region = Region::US;
-    }
-    else if (strictGroups(normalized, UK_LEAD_LETTERS, UK_DIGITS, UK_TAIL_LETTERS))
+    if (strictGroups(normalized, UK_LEAD_LETTERS, UK_DIGITS, UK_TAIL_LETTERS))
     {
         region = Region::UK;
+    }
+    else if (strictGroups(normalized, US_LETTERS, US_DIGITS, 0) || isUsVendorShape(normalized))
+    {
+        region = Region::US;
     }
     else
     {

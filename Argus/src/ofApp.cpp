@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -11,6 +13,13 @@
 
 #include "imgui_internal.h"
 #include "ofJson.h"
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+// OpenCV 5 moved contour helpers out of imgproc into geometry.
+#if CV_VERSION_MAJOR >= 5
+#include <opencv2/geometry.hpp>
+#endif
 
 namespace
 {
@@ -201,6 +210,68 @@ bool isVideoPath(const std::string& path)
     return mediaExtension(path) == "mp4";
 }
 
+// Upper bound for dropped or browsed media, guarding decode memory.
+constexpr std::size_t MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+
+// Writes 16-bit mono WAV samples with a minimal header.
+void writeWavMono(const std::string& path, const std::vector<short>& samples, int sampleRate)
+{
+    std::ofstream out(path, std::ios::binary);
+    if (!out.is_open())
+    {
+        return;
+    }
+    std::uint32_t dataBytes = static_cast<std::uint32_t>(samples.size() * sizeof(short));
+    std::uint32_t chunkSize = 36 + dataBytes;
+    out.write("RIFF", 4);
+    out.write(reinterpret_cast<const char*>(&chunkSize), 4);
+    out.write("WAVEfmt ", 8);
+    std::uint32_t fmtSize = 16;
+    std::uint16_t audioFormat = 1;
+    std::uint16_t channels = 1;
+    std::uint32_t rate = static_cast<std::uint32_t>(sampleRate);
+    std::uint32_t byteRate = rate * sizeof(short);
+    std::uint16_t blockAlign = sizeof(short);
+    std::uint16_t bitsPerSample = 16;
+    out.write(reinterpret_cast<const char*>(&fmtSize), 4);
+    out.write(reinterpret_cast<const char*>(&audioFormat), 2);
+    out.write(reinterpret_cast<const char*>(&channels), 2);
+    out.write(reinterpret_cast<const char*>(&rate), 4);
+    out.write(reinterpret_cast<const char*>(&byteRate), 4);
+    out.write(reinterpret_cast<const char*>(&blockAlign), 2);
+    out.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
+    out.write("data", 4);
+    out.write(reinterpret_cast<const char*>(&dataBytes), 4);
+    out.write(reinterpret_cast<const char*>(samples.data()),
+              static_cast<std::streamsize>(dataBytes));
+}
+
+// True when the file header matches its claimed image or video type.
+bool magicMatches(const std::string& path, bool expectImage, bool expectVideo)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input.is_open())
+    {
+        return false;
+    }
+    unsigned char header[12] = {0};
+    input.read(reinterpret_cast<char*>(header), sizeof(header));
+    if (input.gcount() < 4)
+    {
+        return false;
+    }
+    bool jpeg = header[0] == 0xFF && header[1] == 0xD8;
+    bool png = header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47;
+    bool bmp = header[0] == 0x42 && header[1] == 0x4D;
+    bool mp4 = input.gcount() >= 12 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' &&
+               header[7] == 'p';
+    if (expectVideo)
+    {
+        return mp4;
+    }
+    return jpeg || png || bmp;
+}
+
 // Majority plate across recent reads, first seen winning ties.
 std::pair<std::string, int> majorityVote(const std::vector<std::string>& reads)
 {
@@ -309,6 +380,7 @@ bool candidatesAreSane(const std::vector<argus::PlateCandidate>& candidates, int
 void ofApp::logConsole(const std::string& message, const std::string& level)
 {
     std::string line = "[" + ofGetTimestampString("%H:%M:%S") + "] [" + level + "] " + message;
+    std::lock_guard<std::mutex> guard(consoleMutex);
     consoleLines.push_back(line);
     while (consoleLines.size() > MAX_CONSOLE_LINES)
     {
@@ -484,20 +556,108 @@ ScanResult ofApp::readVoteBox(const ofImage& frame, const argus::PlateCandidate&
     ScanResult vote;
     vote.bestCandidate = box;
     vote.hasBest = true;
-    float frameWidth = static_cast<float>(frame.getWidth());
-    float frameHeight = static_cast<float>(frame.getHeight());
-    float roiX = ofClamp(box.rect.x, 0.0f, frameWidth - 1.0f);
-    float roiY = ofClamp(box.rect.y, 0.0f, frameHeight - 1.0f);
-    float roiW = ofClamp(box.rect.width, 1.0f, frameWidth - roiX);
-    float roiH = ofClamp(box.rect.height, 1.0f, frameHeight - roiY);
-    vote.roiImage.cropFrom(frame, roiX, roiY, roiW, roiH);
-    vote.ocr = ocr.recognize(vote.roiImage);
+    cropDeskewedRoi(frame, box, vote.roiImage);
+    {
+        std::lock_guard<std::mutex> guard(ocrMutex);
+        vote.ocr = ocr.recognize(vote.roiImage);
+    }
     vote.rawPlate = vote.ocr.text;
     std::string plain = validator.normalize(vote.rawPlate);
     vote.normalizedPlate = validator.repair(plain);
     vote.wasRepaired = (vote.normalizedPlate != plain);
     vote.plateValid = validator.isValid(vote.normalizedPlate, vote.region);
     return vote;
+}
+
+float ofApp::frameSharpness(const ofImage& frame)
+{
+    if (!frame.isAllocated())
+    {
+        return 0.0f;
+    }
+    const ofPixels& pixels = frame.getPixels();
+    int width = frame.getWidth();
+    int height = frame.getHeight();
+    unsigned char* raw = const_cast<unsigned char*>(pixels.getData());
+    int type = pixels.getImageType() == OF_IMAGE_COLOR_ALPHA ? CV_8UC4 : CV_8UC3;
+    if (pixels.getImageType() == OF_IMAGE_GRAYSCALE)
+    {
+        cv::Mat gray(height, width, CV_8UC1, raw);
+        cv::Mat lap;
+        cv::Laplacian(gray, lap, CV_64F);
+        cv::Scalar mean;
+        cv::Scalar dev;
+        cv::meanStdDev(lap, mean, dev);
+        return static_cast<float>(dev[0] * dev[0]);
+    }
+    cv::Mat color(height, width, type, raw);
+    cv::Mat gray;
+    int code =
+        pixels.getImageType() == OF_IMAGE_COLOR_ALPHA ? cv::COLOR_RGBA2GRAY : cv::COLOR_RGB2GRAY;
+    cv::cvtColor(color, gray, code);
+    cv::Mat lap;
+    cv::Laplacian(gray, lap, CV_64F);
+    cv::Scalar mean;
+    cv::Scalar dev;
+    cv::meanStdDev(lap, mean, dev);
+    return static_cast<float>(dev[0] * dev[0]);
+}
+
+void ofApp::cropDeskewedRoi(const ofImage& frame, const argus::PlateCandidate& box, ofImage& roi)
+{
+    float frameWidth = static_cast<float>(frame.getWidth());
+    float frameHeight = static_cast<float>(frame.getHeight());
+    float roiX = ofClamp(box.rect.x, 0.0f, frameWidth - 1.0f);
+    float roiY = ofClamp(box.rect.y, 0.0f, frameHeight - 1.0f);
+    float roiW = ofClamp(box.rect.width, 1.0f, frameWidth - roiX);
+    float roiH = ofClamp(box.rect.height, 1.0f, frameHeight - roiY);
+    roi.cropFrom(frame, roiX, roiY, roiW, roiH);
+    if (!roi.isAllocated() || roi.getWidth() < 20 || roi.getHeight() < 8)
+    {
+        return;
+    }
+    straightenRoi(roi);
+}
+
+void ofApp::straightenRoi(ofImage& roi)
+{
+    const ofPixels& pixels = roi.getPixels();
+    int width = roi.getWidth();
+    int height = roi.getHeight();
+    unsigned char* raw = const_cast<unsigned char*>(pixels.getData());
+    cv::Mat gray;
+    if (pixels.getImageType() == OF_IMAGE_GRAYSCALE)
+    {
+        gray = cv::Mat(height, width, CV_8UC1, raw).clone();
+    }
+    else
+    {
+        int type = pixels.getImageType() == OF_IMAGE_COLOR_ALPHA ? CV_8UC4 : CV_8UC3;
+        int code = pixels.getImageType() == OF_IMAGE_COLOR_ALPHA ? cv::COLOR_RGBA2GRAY
+                                                                 : cv::COLOR_RGB2GRAY;
+        cv::Mat color(height, width, type, raw);
+        cv::cvtColor(color, gray, code);
+    }
+    cv::Mat edges;
+    cv::Canny(gray, edges, 40, 120);
+    std::vector<cv::Point> points;
+    cv::findNonZero(edges, points);
+    if (points.size() < 20)
+    {
+        return;
+    }
+    float angle = cv::minAreaRect(points).angle;
+    angle = angle < -45.0f ? angle + 90.0f : angle;
+    if (std::fabs(angle) < 3.0f || std::fabs(angle) > 30.0f)
+    {
+        return;
+    }
+    cv::Point2f center(width * 0.5f, height * 0.5f);
+    cv::Mat warp = cv::getRotationMatrix2D(center, angle, 1.0);
+    cv::Mat straight;
+    cv::warpAffine(gray, straight, warp, gray.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+    roi.setFromPixels(straight.data, width, height, OF_IMAGE_GRAYSCALE);
+    roi.update();
 }
 
 void ofApp::applyScanResult(const std::vector<ScanResult>& reads, const std::string& label)
@@ -539,6 +699,7 @@ void ofApp::applyScanResult(const std::vector<ScanResult>& reads, const std::str
     currentMatch = strongestMatch(plateReads);
     logPipelineSummary(plateReads, label);
     checkAlert();
+    enforceMemoryCaps();
 }
 
 // Clears display members and reports a plateless run.
@@ -835,12 +996,108 @@ void ofApp::checkAlert()
     lastAlertTime = now;
     std::string warn = "[AlertService] FLAGGED " + entry.plate + " - " +
                        argus::flagTypeToString(entry.type) + " -> alert triggered";
-    logConsole(warn, "WARNING");
-    ofLogNotice("AlertService") << warn;
+    recordAlert(warn);
+}
+
+void ofApp::recordAlert(const std::string& banner)
+{
+    logConsole(banner, "WARNING");
+    ofLogNotice("AlertService") << banner;
+    alertHistory.push_back("[" + ofGetTimestampString("%H:%M:%S") + "] " + banner);
+    while (alertHistory.size() > 20)
+    {
+        alertHistory.erase(alertHistory.begin());
+    }
+    ++alertCount;
+    playAlertSound();
+}
+
+void ofApp::playAlertSound()
+{
+    if (!alertSoundEnabled)
+    {
+        return;
+    }
+    if (!alertSound.isLoaded())
+    {
+        writeAlertTone(ofToDataPath("alert_tone.wav", true));
+        alertSound.load(ofToDataPath("alert_tone.wav", true));
+    }
+    if (alertSound.isLoaded())
+    {
+        alertSound.play();
+    }
+}
+
+void ofApp::writeAlertTone(const std::string& path)
+{
+    ofFile toneFile(path);
+    if (toneFile.exists())
+    {
+        return;
+    }
+    constexpr int sampleRate = 22050;
+    constexpr float duration = 0.25f;
+    constexpr float frequency = 880.0f;
+    int frames = static_cast<int>(sampleRate * duration);
+    std::vector<short> samples(static_cast<std::size_t>(frames));
+    for (int i = 0; i < frames; ++i)
+    {
+        float phase = 2.0f * 3.14159265f * frequency * i / sampleRate;
+        samples[static_cast<std::size_t>(i)] = static_cast<short>(12000.0f * sin(phase));
+    }
+    writeWavMono(path, samples, sampleRate);
+}
+
+bool ofApp::canEditFlags() const
+{
+    return currentRole != Role::Viewer;
+}
+
+bool ofApp::canPurge() const
+{
+    return currentRole == Role::Admin;
+}
+
+void ofApp::enforceMemoryCaps()
+{
+    double imageMB = imageMegaBytes(img) + imageMegaBytes(frameImage);
+    double totalMB = imageMB + imageMegaBytes(plateRoiImg) + processResidentMB();
+    bool overTotal = totalMB > maxTotalMB;
+    bool overCache = imageMB > maxImageCacheMB;
+    if (autoClearEnable && (overTotal || overCache))
+    {
+        purgeCachesInternal();
+        logConsole("[Memory] Auto-clear past cap", "WARNING");
+    }
+}
+
+void ofApp::exportLogs()
+{
+    int csvRows = logger.exportCsv("resources/logs_export.csv");
+    bool jsonOk = logger.exportJson("resources/logs_export.json");
+    bool rotated = logger.rotate(scanLogPath);
+    std::string receipt = "[Logger] Export csv=" + ofToString(csvRows) +
+                          " json=" + (jsonOk ? "ok" : "fail") +
+                          " rotated=" + (rotated ? "yes" : "no");
+    logConsole(receipt, "INFO");
+}
+
+void ofApp::retainLogs()
+{
+    int kept = logger.purgeOlderThan(scanLogPath, 30);
+    bool rotated = logger.rotate(scanLogPath);
+    logConsole("[Logger] Retain kept=" + ofToString(kept) + " rotated=" + (rotated ? "yes" : "no"),
+               "INFO");
 }
 
 void ofApp::saveDecisionAndLog()
 {
+    if (currentRole == Role::Viewer)
+    {
+        logConsole("Viewer role cannot save decisions", "ERROR");
+        return;
+    }
     operatorNotes = std::string(notesBuffer);
     argus::ScanEvent event;
     event.timestamp = ofGetTimestampString("%Y-%m-%d %H:%M:%S");
@@ -862,7 +1119,10 @@ void ofApp::saveDecisionAndLog()
     event.region = regionName(detectedRegion);
     event.decision = currentDecision;
     event.operatorNotes = operatorNotes;
+    event.perCharConf = lastOcrResult.perCharConf;
     logger.log(event, scanLogPath);
+    logger.rotate(scanLogPath);
+    enforceMemoryCaps();
     bLoggerRan = true;
     saveToastText = "Decision saved -> logs.jsonl";
     std::string info = "[Logger] Logged scan event for " + normalizedPlateText + " -> logs.jsonl";
@@ -1094,6 +1354,7 @@ bool ofApp::runDetectionQualityChecks()
 
 void ofApp::update()
 {
+    pollBatchThread();
     if (mediaKind != MediaKind::Video)
     {
         return;
@@ -1117,6 +1378,12 @@ void ofApp::processLiveFrame()
 {
     if (mediaKind != MediaKind::Video || !frameImage.isAllocated())
     {
+        return;
+    }
+    float sharp = frameSharpness(frameImage);
+    if (sharp < minSharpness)
+    {
+        logConsole("[Pipeline] Live frame skipped, blur " + ofToString(sharp, 1), "INFO");
         return;
     }
     std::vector<ScanResult> reads = processFrame(frameImage);
@@ -1323,39 +1590,72 @@ void ofApp::corruptDemoRun()
 
 void ofApp::batchProcessImages()
 {
+    startBatchThread();
+}
+
+void ofApp::startBatchThread()
+{
+    if (batchRunning.load())
+    {
+        logConsole("[Batch] Already running: " + batchProgress, "WARNING");
+        return;
+    }
+    if (batchThread.joinable())
+    {
+        batchThread.join();
+    }
+    batchRunning.store(true);
+    batchProgress = "starting";
+    batchThread = std::thread(&ofApp::batchWorkerBody, this);
+}
+
+void ofApp::batchWorkerBody()
+{
     ofDirectory imagesDir("resources/images");
     imagesDir.allowExt("jpg");
     imagesDir.listDir();
-    std::size_t totalCandidates = 0;
-    int processed = 0;
     int limit = std::min<int>(10, static_cast<int>(imagesDir.size()));
+    {
+        std::lock_guard<std::mutex> guard(batchMutex);
+        batchTotal = limit;
+        batchDone = 0;
+    }
+    std::size_t totalCandidates = 0;
+    std::size_t totalReads = 0;
     for (int file = 0; file < limit; ++file)
     {
-        ofImage batchImage;
-        if (!batchImage.load(imagesDir.getPath(file)))
+        if (!batchRunning.load())
         {
-            logConsole("Batch skip unreadable: " + imagesDir.getName(file), "WARNING");
+            break;
+        }
+        ofImage batchImage;
+        std::string name = imagesDir.getName(file);
+        std::string fullPath = imagesDir.getPath(file);
+        if (!batchImage.load(fullPath))
+        {
             continue;
         }
-        std::vector<argus::PlateCandidate> found;
-        try
-        {
-            found = detector.detect(batchImage);
-        }
-        catch (const std::exception&)
-        {
-            found.clear();
-        }
-        totalCandidates += found.size();
-        ++processed;
-        logConsole("[Batch] " + imagesDir.getName(file) + ": " + ofToString(found.size()) +
-                       " candidate(s)",
-                   "INFO");
+        std::vector<ScanResult> reads = processFrame(batchImage);
+        totalCandidates += reads.empty() ? 0 : reads.front().candidates.size();
+        totalReads += reads.size();
+        std::lock_guard<std::mutex> guard(batchMutex);
+        ++batchDone;
+        batchProgress = name + " " + ofToString(batchDone) + "/" + ofToString(limit);
     }
-    std::string done = "[Batch] Done " + ofToString(processed) + " file(s), " +
-                       ofToString(totalCandidates) + " candidate(s)";
+    std::string done = "[Batch] Done " + ofToString(limit) + " file(s), " +
+                       ofToString(totalCandidates) + " candidate(s), " + ofToString(totalReads) +
+                       " read(s)";
     logConsole(done, "INFO");
     ofLogNotice("Batch") << done;
+    batchRunning.store(false);
+}
+
+void ofApp::pollBatchThread()
+{
+    if (!batchRunning.load() && batchThread.joinable())
+    {
+        batchThread.join();
+    }
 }
 
 void ofApp::ocrFailDemoRun()
@@ -1376,6 +1676,16 @@ void ofApp::ocrFailDemoRun()
 
 void ofApp::purgeCaches()
 {
+    if (!canPurge())
+    {
+        logConsole("Purge requires Admin role", "ERROR");
+        return;
+    }
+    purgeCachesInternal();
+}
+
+void ofApp::purgeCachesInternal()
+{
     std::size_t freed =
         candidates.size() + plateReads.size() + frameVotes.size() + frameTracks.size();
     candidates.clear();
@@ -1388,6 +1698,29 @@ void ofApp::purgeCaches()
     ofLogNotice("Cache") << done;
 }
 
+bool ofApp::guardMediaPath(const std::string& path)
+{
+    if (path.find("..") != std::string::npos)
+    {
+        logConsole("Rejected traversal path: " + path, "ERROR");
+        return false;
+    }
+    ofFile file(path);
+    if (file.getSize() > MAX_MEDIA_BYTES)
+    {
+        logConsole("Rejected oversize media: " + path, "ERROR");
+        return false;
+    }
+    bool image = isImagePath(path);
+    bool video = isVideoPath(path);
+    if ((image || video) && !magicMatches(path, image, video))
+    {
+        logConsole("Rejected magic mismatch: " + path, "ERROR");
+        return false;
+    }
+    return true;
+}
+
 bool ofApp::loadMedia(const std::string& path)
 {
     ofFile file(path);
@@ -1395,6 +1728,11 @@ bool ofApp::loadMedia(const std::string& path)
     {
         logConsole("Media not found: " + path, "ERROR");
         ofLogNotice("Media") << "Media not found: " << path;
+        return false;
+    }
+    if (!guardMediaPath(path))
+    {
+        ofLogNotice("Media") << "Guard rejected: " << path;
         return false;
     }
     frameVotes.clear();
@@ -1474,7 +1812,16 @@ void ofApp::readVideoFrame()
         return;
     }
     bool fresh = !frameImage.isAllocated();
-    frameImage.setFromPixels(videoPlayer.getPixels());
+    {
+        std::lock_guard<std::mutex> guard(videoMutex);
+        videoQueue.push(videoPlayer.getPixels());
+        while (static_cast<int>(videoQueue.size()) > maxVideoQueue)
+        {
+            videoQueue.pop();
+            ++spillCount;
+        }
+        frameImage.setFromPixels(videoQueue.back());
+    }
     if (fresh)
     {
         videoFirstPending = true;
@@ -1678,8 +2025,22 @@ void ofApp::drawPipelinePanel()
     }
 
     ImGui::Separator();
-    ImGui::Text("Loaded: 4 imgs · 0 vid");
-    ImGui::Text("Video buf: 24 frames, double-buffer");
+    std::string progress;
+    int queueSize = 0;
+    {
+        std::lock_guard<std::mutex> guard(batchMutex);
+        progress = batchProgress;
+    }
+    {
+        std::lock_guard<std::mutex> guard(videoMutex);
+        queueSize = static_cast<int>(videoQueue.size());
+    }
+    ImGui::Text("Batch: %s", progress.c_str());
+    if (batchRunning.load() && ImGui::Button("Cancel batch"))
+    {
+        batchRunning.store(false);
+    }
+    ImGui::Text("Video queue: %d/%d spills %d", queueSize, maxVideoQueue, spillCount);
     ImGui::End();
 }
 
@@ -1947,6 +2308,7 @@ void ofApp::drawInspectorPanel()
         {
             ImGui::Text("Mean: %.1f%%", lastOcrResult.meanConf);
             drawOcrChips();
+            drawOcrSparkline();
             ImGui::Text("Normalization: O->0, I->1, uppercase, strip.");
         }
     }
@@ -1956,13 +2318,17 @@ void ofApp::drawInspectorPanel()
     }
     if (ImGui::CollapsingHeader("Memory (this view)"))
     {
-        ImGui::Text("Image: 4.2 MB");
-        ImGui::Text("Decoded mat: 11.8 MB");
-        ImGui::Text("Video cache: 0 MB");
+        ImGui::Text("Image: %.1f MB", imageMegaBytes(img));
+        ImGui::Text("Decoded mat: %.1f MB", imageMegaBytes(frameImage));
+        ImGui::Text("Video cache: %.1f MB", imageMegaBytes(frameImage));
         if (ImGui::Button("Purge caches"))
         {
             purgeCaches();
         }
+    }
+    if (ImGui::CollapsingHeader("Policy"))
+    {
+        drawPolicySection();
     }
     if (ImGui::CollapsingHeader("Flag editor"))
     {
@@ -2011,6 +2377,11 @@ void ofApp::drawFlagModal()
 
 void ofApp::saveFlagEntry()
 {
+    if (!canEditFlags())
+    {
+        logConsole("Viewer role cannot edit flags", "ERROR");
+        return;
+    }
     std::string plate = validator.normalize(flagPlateBuffer);
     if (plate.empty())
     {
@@ -2040,8 +2411,13 @@ void ofApp::saveFlagEntry()
 
 void ofApp::drawConsoleTab()
 {
+    std::vector<std::string> lines;
+    {
+        std::lock_guard<std::mutex> guard(consoleMutex);
+        lines = consoleLines;
+    }
     ImGui::BeginChild("ConsoleScroll", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
-    for (const auto& line : consoleLines)
+    for (const auto& line : lines)
     {
         if (line.find("[ERROR]") != std::string::npos)
         {
@@ -2127,6 +2503,11 @@ void ofApp::drawFlaggedRow(const argus::FlagEntry& row)
 // Loads one watchlist entry into the flag modal inputs.
 void ofApp::editFlagEntry(const std::string& plate)
 {
+    if (!canEditFlags())
+    {
+        logConsole("Viewer role cannot edit flags", "ERROR");
+        return;
+    }
     std::optional<argus::FlagEntry> found = flagStore.lookup(plate);
     if (!found.has_value())
     {
@@ -2149,6 +2530,11 @@ void ofApp::editFlagEntry(const std::string& plate)
 // Drops one watchlist entry and persists the remainder.
 void ofApp::deleteFlagEntry(const std::string& plate)
 {
+    if (!canEditFlags())
+    {
+        logConsole("Viewer role cannot edit flags", "ERROR");
+        return;
+    }
     flagStore.remove(plate);
     if (!flagStore.save(flaggedJsonPath))
     {
@@ -2162,6 +2548,15 @@ void ofApp::deleteFlagEntry(const std::string& plate)
 
 void ofApp::drawLogsTab()
 {
+    if (ImGui::Button("Export CSV/JSON"))
+    {
+        exportLogs();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Retain 30d"))
+    {
+        retainLogs();
+    }
     if (logger.recentEvents.empty())
     {
         ImGui::Text("No log entries yet");
@@ -2286,6 +2681,10 @@ void ofApp::drawViewportImage()
     {
         drawCandidateOverlays();
     }
+    if (blurEnabled)
+    {
+        drawBlurOverlays();
+    }
 }
 
 void ofApp::drawCandidateOverlays()
@@ -2303,6 +2702,27 @@ void ofApp::drawCandidateOverlays()
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
         drawCandidateBox(i, candidates[i], scaleX, scaleY);
+    }
+    ofPopStyle();
+}
+
+void ofApp::drawBlurOverlays()
+{
+    const ofImage& view = displayImage();
+    if (candidates.empty() || !view.isAllocated())
+    {
+        return;
+    }
+    float scaleX = viewportImageRect.width / static_cast<float>(view.getWidth());
+    float scaleY = viewportImageRect.height / static_cast<float>(view.getHeight());
+    ofPushStyle();
+    ofFill();
+    ofSetColor(30, 30, 40, 220);
+    for (const auto& candidate : candidates)
+    {
+        float boxX = viewportImageRect.x + candidate.rect.x * scaleX;
+        float boxY = viewportImageRect.y + candidate.rect.y * scaleY;
+        ofDrawRectangle(boxX, boxY, candidate.rect.width * scaleX, candidate.rect.height * scaleY);
     }
     ofPopStyle();
 }
@@ -2377,7 +2797,51 @@ void ofApp::draw()
 
 void ofApp::exit()
 {
+    batchRunning.store(false);
+    if (batchThread.joinable())
+    {
+        batchThread.join();
+    }
     ofLog() << "ofApp::exit() called";
+}
+
+void ofApp::drawOcrSparkline()
+{
+    if (lastOcrResult.perCharConf.empty())
+    {
+        return;
+    }
+    std::vector<float> values = lastOcrResult.perCharConf;
+    ImGui::PlotLines("per-char", values.data(), static_cast<int>(values.size()), 0, nullptr, 0.0f,
+                     100.0f, ImVec2(-1.0f, 48.0f));
+}
+
+void ofApp::drawPolicySection()
+{
+    const char* roles[] = {"Admin", "Operator", "Viewer"};
+    int roleIndex = currentRole == Role::Admin ? 0 : (currentRole == Role::Operator ? 1 : 2);
+    if (ImGui::Combo("Role", &roleIndex, roles, 3))
+    {
+        currentRole =
+            roleIndex == 0 ? Role::Admin : (roleIndex == 1 ? Role::Operator : Role::Viewer);
+        logConsole("Role: " + std::string(roles[roleIndex]), "INFO");
+    }
+    ImGui::Checkbox("Blur plates", &blurEnabled);
+    ImGui::SameLine();
+    ImGui::Checkbox("Alert sound", &alertSoundEnabled);
+    ImGui::SliderFloat("Max total MB", &maxTotalMB, 512.0f, 6000.0f, "%.0f");
+    ImGui::SliderFloat("Image cache MB", &maxImageCacheMB, 64.0f, 2048.0f, "%.0f");
+    ImGui::SliderFloat("Sharpness floor", &minSharpness, 0.0f, 200.0f, "%.1f");
+    ImGui::Text("Alerts: %d  Spills: %d", alertCount, spillCount);
+    if (ImGui::Button("Export logs"))
+    {
+        exportLogs();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Retain 30d"))
+    {
+        retainLogs();
+    }
 }
 
 void ofApp::drawMemoryTab()
@@ -2394,6 +2858,24 @@ void ofApp::drawMemoryTab()
     if (ImGui::Button("Clear caches"))
     {
         purgeCaches();
+    }
+    ImGui::Separator();
+    drawPolicySection();
+    ImGui::Separator();
+    std::string progress;
+    int queueSize = 0;
+    {
+        std::lock_guard<std::mutex> guard(batchMutex);
+        progress = batchProgress;
+    }
+    {
+        std::lock_guard<std::mutex> guard(videoMutex);
+        queueSize = static_cast<int>(videoQueue.size());
+    }
+    ImGui::Text("Queue: %d/%d  Batch: %s", queueSize, maxVideoQueue, progress.c_str());
+    for (const auto& alert : alertHistory)
+    {
+        ImGui::TextWrapped("%s", alert.c_str());
     }
 }
 
